@@ -7,6 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -18,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import android.widget.Toast
 import androidx.lifecycle.Lifecycle
@@ -44,6 +47,7 @@ import takagi.ru.monica.steam.friends.voice.presentation.SteamVoiceCallRuntime
 import takagi.ru.monica.steam.store.share.domain.SteamStoreGameShare
 import takagi.ru.monica.ui.navigation.easyNotesScreenEnter
 import takagi.ru.monica.ui.navigation.easyNotesScreenExit
+import takagi.ru.monica.steam.navigation.ui.rememberSteamAdaptiveLayout
 
 @Composable
 fun SteamChatScreen(
@@ -339,6 +343,125 @@ fun SteamChatScreen(
         onCloseGroupThread = groupChatViewModel::closeRoom
     )
 
+    val adaptiveLayout = rememberSteamAdaptiveLayout()
+
+    @Composable
+    fun renderConversationList(targetModifier: Modifier) {
+        SteamChatRootContent(
+            standalone = standalone,
+            showFriends = showFriends,
+            addFriendOpen = addFriendOpen,
+            standaloneSearchQuery = standaloneSearchQuery,
+            searchExpanded = searchExpanded,
+            accountSourceState = accountSourceState,
+            friendsState = friendsState,
+            chatState = chatState,
+            groupChatState = groupChatState,
+            voiceState = voiceState,
+            effectiveSearchQuery = effectiveSearchQuery,
+            pinnedDirectIds = pinnedDirectIds,
+            pinnedGroupIds = pinnedGroupIds,
+            onStandaloneSearchQueryChange = { standaloneSearchQuery = it },
+            onSearchExpandedChange = { expanded ->
+                searchExpanded = expanded
+                if (!expanded) standaloneSearchQuery = ""
+            },
+            onShowAccounts = { showAccounts = true },
+            onToggleFriends = {
+                addFriendOpen = false
+                showFriends = !showFriends
+            },
+            onAddFriendOpenChange = { open ->
+                addFriendOpen = open
+                if (open) {
+                    showFriends = true
+                    searchExpanded = false
+                    standaloneSearchQuery = ""
+                } else {
+                    friendsViewModel.clearFriendDiscovery()
+                }
+            },
+            onOpenOfficialAddFriend = { officialAddFriendOpen = true },
+            onFindFriendCandidates = friendsViewModel::findFriendCandidates,
+            onAddFriend = { friend ->
+                friendsViewModel.changeRelationship(
+                    friend,
+                    SteamFriendRelationshipAction.ADD
+                )
+            },
+            onRespondToInvite = friendsViewModel::respondToInvite,
+            onOpenDirect = { steamId ->
+                showFriends = false
+                addFriendOpen = false
+                groupChatViewModel.closeRoom()
+                chatViewModel.openThread(steamId)
+            },
+            onOpenGroup = { groupId, chatId ->
+                chatViewModel.closeThread()
+                groupChatViewModel.openRoom(groupId, chatId)
+            },
+            onRefreshFriends = friendsViewModel::refresh,
+            onRefreshConversations = {
+                chatViewModel.refreshSessions()
+                groupChatViewModel.refreshGroups()
+            },
+            onCreateGroup = { showCreateGroup = true },
+            onLeaveVoice = voiceRuntime::stop,
+            onToggleVoiceMicrophone = voiceRuntime::toggleMicrophone,
+            onToggleVoiceOutput = voiceRuntime::toggleOutput,
+            onSelectVoiceAudioRoute = voiceRuntime::selectAudioRoute,
+            modifier = targetModifier
+        )
+    }
+
+    @Composable
+    fun renderSelectedConversation(
+        partnerSteamId: String?,
+        currentSubpage: SteamChatSubpage?,
+        targetModifier: Modifier
+    ) {
+        SteamChatSelectedContent(
+            partnerSteamId = partnerSteamId,
+            currentSubpage = currentSubpage,
+            selectedAccount = selectedAccount,
+            selectedFriend = selectedFriend,
+            friendsState = friendsState,
+            chatState = chatState,
+            groupChatState = groupChatState,
+            richMediaState = richMediaState,
+            voiceState = voiceState,
+            conversationPreferences = conversationPreferences,
+            targetMessageId = targetMessageId,
+            gameShareDraft = requestedGameShare.takeIf {
+                partnerSteamId == requestedGameSharePartnerSteamId
+            },
+            chatViewModel = chatViewModel,
+            friendsViewModel = friendsViewModel,
+            groupChatViewModel = groupChatViewModel,
+            richMediaViewModel = richMediaViewModel,
+            messageActionViewModel = messageActionViewModel,
+            voiceRuntime = voiceRuntime,
+            runVoiceAction = ::runVoiceAction,
+            onSubpageChange = { subpage = it },
+            onCreateGroupFromFriend = { steamId ->
+                initialGroupInvitees = setOf(steamId)
+                showCreateGroup = true
+            },
+            onInviteFriend = { showInviteFriend = true },
+            onPreferencesChange = { updated ->
+                conversationPreferences = updated
+                currentConversationId?.let { infoPreferencesStore.save(it, updated) }
+            },
+            onOpenTargetMessage = { messageId ->
+                targetMessageId = messageId
+                subpage = null
+            },
+            onConsumeGameShareDraft = onConsumeRequestedGameShare,
+            onOpenStoreApp = onOpenStoreApp,
+            modifier = targetModifier
+        )
+    }
+
     AnimatedContent(
         targetState = Triple(chatState.selectedPartnerSteamId, groupChatState.selectedChatId, subpage),
         modifier = modifier.fillMaxSize(),
@@ -349,112 +472,26 @@ fun SteamChatScreen(
         label = "SteamChatNavigation"
     ) { (partnerSteamId, groupRoomId, currentSubpage) ->
         if (partnerSteamId == null && groupRoomId == null) {
-            SteamChatRootContent(
-                standalone = standalone,
-                showFriends = showFriends,
-                addFriendOpen = addFriendOpen,
-                standaloneSearchQuery = standaloneSearchQuery,
-                searchExpanded = searchExpanded,
-                accountSourceState = accountSourceState,
-                friendsState = friendsState,
-                chatState = chatState,
-                groupChatState = groupChatState,
-                voiceState = voiceState,
-                effectiveSearchQuery = effectiveSearchQuery,
-                pinnedDirectIds = pinnedDirectIds,
-                pinnedGroupIds = pinnedGroupIds,
-                onStandaloneSearchQueryChange = { standaloneSearchQuery = it },
-                onSearchExpandedChange = { expanded ->
-                    searchExpanded = expanded
-                    if (!expanded) standaloneSearchQuery = ""
-                },
-                onShowAccounts = { showAccounts = true },
-                onToggleFriends = {
-                    addFriendOpen = false
-                    showFriends = !showFriends
-                },
-                onAddFriendOpenChange = { open ->
-                    addFriendOpen = open
-                    if (open) {
-                        showFriends = true
-                        searchExpanded = false
-                        standaloneSearchQuery = ""
-                    } else {
-                        friendsViewModel.clearFriendDiscovery()
-                    }
-                },
-                onOpenOfficialAddFriend = { officialAddFriendOpen = true },
-                onFindFriendCandidates = friendsViewModel::findFriendCandidates,
-                onAddFriend = { friend ->
-                    friendsViewModel.changeRelationship(
-                        friend,
-                        SteamFriendRelationshipAction.ADD
-                    )
-                },
-                onRespondToInvite = friendsViewModel::respondToInvite,
-                onOpenDirect = { steamId ->
-                    showFriends = false
-                    addFriendOpen = false
-                    groupChatViewModel.closeRoom()
-                    chatViewModel.openThread(steamId)
-                },
-                onOpenGroup = { groupId, chatId ->
-                    chatViewModel.closeThread()
-                    groupChatViewModel.openRoom(groupId, chatId)
-                },
-                onRefreshFriends = friendsViewModel::refresh,
-                onRefreshConversations = {
-                    chatViewModel.refreshSessions()
-                    groupChatViewModel.refreshGroups()
-                },
-                onCreateGroup = { showCreateGroup = true },
-                onLeaveVoice = voiceRuntime::stop,
-                onToggleVoiceMicrophone = voiceRuntime::toggleMicrophone,
-                onToggleVoiceOutput = voiceRuntime::toggleOutput,
-                onSelectVoiceAudioRoute = voiceRuntime::selectAudioRoute,
-                modifier = Modifier.fillMaxSize()
-            )
+            renderConversationList(Modifier.fillMaxSize())
         } else {
-            SteamChatSelectedContent(
-                partnerSteamId = partnerSteamId,
-                currentSubpage = currentSubpage,
-                selectedAccount = selectedAccount,
-                selectedFriend = selectedFriend,
-                friendsState = friendsState,
-                chatState = chatState,
-                groupChatState = groupChatState,
-                richMediaState = richMediaState,
-                voiceState = voiceState,
-                conversationPreferences = conversationPreferences,
-                targetMessageId = targetMessageId,
-                gameShareDraft = requestedGameShare.takeIf {
-                    partnerSteamId == requestedGameSharePartnerSteamId
-                },
-                chatViewModel = chatViewModel,
-                friendsViewModel = friendsViewModel,
-                groupChatViewModel = groupChatViewModel,
-                richMediaViewModel = richMediaViewModel,
-                messageActionViewModel = messageActionViewModel,
-                voiceRuntime = voiceRuntime,
-                runVoiceAction = ::runVoiceAction,
-                onSubpageChange = { subpage = it },
-                onCreateGroupFromFriend = { steamId ->
-                    initialGroupInvitees = setOf(steamId)
-                    showCreateGroup = true
-                },
-                onInviteFriend = { showInviteFriend = true },
-                onPreferencesChange = { updated ->
-                    conversationPreferences = updated
-                    currentConversationId?.let { infoPreferencesStore.save(it, updated) }
-                },
-                onOpenTargetMessage = { messageId ->
-                    targetMessageId = messageId
-                    subpage = null
-                },
-                onConsumeGameShareDraft = onConsumeRequestedGameShare,
-                onOpenStoreApp = onOpenStoreApp,
-                modifier = Modifier.fillMaxSize()
-            )
+            if (adaptiveLayout.useTwoPaneLayout) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    renderConversationList(
+                        Modifier.width(adaptiveLayout.preferredListPaneWidthDp.dp)
+                    )
+                    renderSelectedConversation(
+                        partnerSteamId = partnerSteamId,
+                        currentSubpage = currentSubpage,
+                        targetModifier = Modifier.weight(1f).fillMaxSize()
+                    )
+                }
+            } else {
+                renderSelectedConversation(
+                    partnerSteamId = partnerSteamId,
+                    currentSubpage = currentSubpage,
+                    targetModifier = Modifier.fillMaxSize()
+                )
+            }
         }
     }
 

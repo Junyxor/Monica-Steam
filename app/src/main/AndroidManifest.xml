@@ -163,7 +163,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="msauth"
-                    android:host="takagi.ru.monica"
+                    android:host="takagi.ru.monica.steamapp"
                     android:path="/FwPDMDAjg96+0gxjMKKmnQS/dQA=" />
             </intent-filter>
         </activity>

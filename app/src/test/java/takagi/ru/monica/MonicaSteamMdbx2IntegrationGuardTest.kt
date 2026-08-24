@@ -34,7 +34,10 @@ class MonicaSteamMdbx2IntegrationGuardTest {
         assertFalse(build.contains("compileOnly 'com.microsoft.identity.client:msal:8.3.2'"))
         assertTrue(manifest.contains("com.microsoft.identity.client.BrowserTabActivity"))
         assertTrue(manifest.contains("android:scheme=$quote" + "msauth$quote"))
-        assertTrue(manifest.contains("android:host=$quote" + "takagi.ru.monica$quote"))
+        assertTrue(manifest.contains("android:host=$quote" + "takagi.ru.monica.steamapp$quote"))
+        assertFalse(manifest.contains("android:host=$quote" + "takagi.ru.monica$quote"))
+        assertTrue(config.contains("msauth://takagi.ru.monica.steamapp/"))
+        assertFalse(config.contains("msauth://takagi.ru.monica/"))
         assertTrue(config.contains("$quote" + "pii_enabled$quote: false"))
         assertTrue(config.contains("$quote" + "logcat_enabled$quote: false"))
     }

@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 
 @Immutable
 internal data class SteamWindowChromeInsetsPx(
@@ -64,11 +65,23 @@ internal fun Modifier.steamWindowTopPadding(): Modifier =
     windowInsetsPadding(rememberSteamWindowTopInsets())
 
 @Composable
+internal fun Modifier.steamWindowHorizontalPadding(): Modifier =
+    windowInsetsPadding(rememberSteamWindowHorizontalInsets())
+
+@Composable
+internal fun Modifier.steamWindowStartPadding(): Modifier =
+    windowInsetsPadding(rememberSteamWindowStartInsets())
+
+@Composable
 internal fun Modifier.steamWindowBottomPadding(
     suppressWhenImeVisible: Boolean = false
 ): Modifier = windowInsetsPadding(
     rememberSteamWindowBottomInsets(suppressWhenImeVisible)
 )
+
+@Composable
+internal fun Modifier.steamWindowBottomOnlyPadding(): Modifier =
+    windowInsetsPadding(rememberSteamWindowBottomOnlyInsets())
 
 @Composable
 internal fun rememberSteamWindowBottomInsets(
@@ -84,6 +97,43 @@ internal fun rememberSteamWindowBottomInsets(
     val bottomPx = resolveSteamWindowBottomPaddingPx(stableInsets, imeVisible)
     return remember(leftPx, rightPx, bottomPx) {
         WindowInsets(leftPx, 0, rightPx, bottomPx)
+    }
+}
+
+@Composable
+private fun rememberSteamWindowBottomOnlyInsets(): WindowInsets {
+    val bottomPx = rememberSteamWindowChromeInsetsPx().bottomPx
+    return remember(bottomPx) { WindowInsets(0, 0, 0, bottomPx) }
+}
+
+@Composable
+private fun rememberSteamWindowHorizontalInsets(): WindowInsets {
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+    val safeDrawing = WindowInsets.safeDrawing
+    val leftPx = safeDrawing.getLeft(density, layoutDirection)
+    val rightPx = safeDrawing.getRight(density, layoutDirection)
+    return remember(leftPx, rightPx) {
+        WindowInsets(leftPx, 0, rightPx, 0)
+    }
+}
+
+@Composable
+private fun rememberSteamWindowStartInsets(): WindowInsets {
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+    val safeDrawing = WindowInsets.safeDrawing
+    val startPx = if (layoutDirection == LayoutDirection.Ltr) {
+        safeDrawing.getLeft(density, layoutDirection)
+    } else {
+        safeDrawing.getRight(density, layoutDirection)
+    }
+    return remember(startPx, layoutDirection) {
+        if (layoutDirection == LayoutDirection.Ltr) {
+            WindowInsets(startPx, 0, 0, 0)
+        } else {
+            WindowInsets(0, 0, startPx, 0)
+        }
     }
 }
 

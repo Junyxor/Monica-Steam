@@ -195,6 +195,8 @@ import takagi.ru.monica.steam.navigation.ui.steamDockActionClearance
 import takagi.ru.monica.steam.navigation.ui.steamWindowTopPadding
 import takagi.ru.monica.steam.network.SteamAuthorizedDevice
 import takagi.ru.monica.steam.network.SteamConfirmation
+import takagi.ru.monica.steam.network.SteamConfirmationPartnerProfile
+import takagi.ru.monica.steam.network.SteamConfirmationPartnerProfileService
 import takagi.ru.monica.steam.network.SteamPendingLogin
 import takagi.ru.monica.steam.gifts.domain.SteamGiftAction
 import takagi.ru.monica.steam.gifts.domain.SteamPendingGift
@@ -3099,7 +3101,7 @@ private fun SteamAccountDetailContent(
                     copySteamText(
                         context = context,
                         clipboard = clipboard,
-                        label = context.getString(R.string.steam_code_label),
+                        label = context.getString(R.string.verification_code_copied),
                         value = code
                     )
                 }
@@ -3550,6 +3552,7 @@ private fun SteamConfirmationsContent(
 
     detailConfirmation?.let { confirmation ->
         SteamConfirmationDetailSheet(
+            account = account,
             confirmation = confirmation,
             onDismissRequest = { detailConfirmation = null },
             onApprove = {
@@ -4143,6 +4146,7 @@ private fun steamConfirmationKindLabel(kind: SteamConfirmationKind): String {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SteamConfirmationDetailSheet(
+    account: SteamAccount?,
     confirmation: SteamConfirmation,
     onDismissRequest: () -> Unit,
     onApprove: () -> Unit,
@@ -4161,6 +4165,34 @@ private fun SteamConfirmationDetailSheet(
             SteamConfirmationRiskLevel.HIGH -> R.string.steam_confirmation_risk_high
         }
     )
+    val isTradeConfirmation = kind == SteamConfirmationKind.TRADE
+    val partnerSteamId = confirmation.partnerSteamId.takeIf { it.isNotBlank() }
+    val partnerProfileService = remember { SteamConfirmationPartnerProfileService() }
+    var partnerProfile by remember(confirmation.id, partnerSteamId) {
+        mutableStateOf<SteamConfirmationPartnerProfile?>(null)
+    }
+    var partnerProfileLoading by remember(confirmation.id, partnerSteamId) {
+        mutableStateOf(false)
+    }
+    var partnerProfileLoaded by remember(confirmation.id, partnerSteamId) {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(account?.id, confirmation.id, partnerSteamId, isTradeConfirmation) {
+        if (!isTradeConfirmation || account == null || partnerSteamId == null) {
+            partnerProfileLoading = false
+            partnerProfileLoaded = true
+            return@LaunchedEffect
+        }
+        partnerProfileLoading = true
+        partnerProfile = withContext(Dispatchers.IO) {
+            runCatching {
+                partnerProfileService.fetch(account, partnerSteamId)
+            }.getOrNull()
+        }
+        partnerProfileLoading = false
+        partnerProfileLoaded = true
+    }
 
     MonicaModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -4213,6 +4245,14 @@ private fun SteamConfirmationDetailSheet(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
+            if (isTradeConfirmation) {
+                SteamConfirmationPartnerProfileCard(
+                    profile = partnerProfile,
+                    fallbackName = confirmation.headline,
+                    loading = partnerProfileLoading,
+                    loaded = partnerProfileLoaded
+                )
+            }
             if (confirmation.summary.isNotBlank()) {
                 Text(
                     text = confirmation.summary,
@@ -4270,6 +4310,109 @@ private fun SteamConfirmationDetailSheet(
                     Text(stringResource(R.string.steam_approve))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SteamConfirmationPartnerProfileCard(
+    profile: SteamConfirmationPartnerProfile?,
+    fallbackName: String,
+    loading: Boolean,
+    loaded: Boolean
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            SteamConfirmationPartnerAvatar(profile?.avatarUrl.orEmpty())
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.steam_confirmation_partner_title),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = profile?.personaName ?: fallbackName.ifBlank {
+                        stringResource(R.string.steam_confirmation_partner_unknown)
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                when {
+                    loading -> Text(
+                        text = stringResource(R.string.steam_confirmation_partner_loading),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    profile != null -> {
+                        val levelText = profile.steamLevel?.let {
+                            stringResource(R.string.steam_confirmation_partner_level, it)
+                        } ?: stringResource(R.string.steam_confirmation_partner_level_unknown)
+                        val registeredText = profile.timeCreated.takeIf { it > 0L }?.let {
+                            stringResource(
+                                R.string.steam_confirmation_partner_registered,
+                                formatSteamRegistrationTime(it * 1000L)
+                            )
+                        }
+                        Text(
+                            text = listOfNotNull(levelText, registeredText).joinToString(" · "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                    loaded -> Text(
+                        text = stringResource(R.string.steam_confirmation_partner_unavailable),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SteamConfirmationPartnerAvatar(url: String) {
+    val context = LocalContext.current
+    var image by remember(url) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(url) {
+        image = if (url.isBlank()) {
+            null
+        } else {
+            loadSteamConfirmationImage(context, url)
+        }
+    }
+    Surface(
+        modifier = Modifier.size(48.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest
+    ) {
+        image?.let {
+            Image(
+                bitmap = it,
+                contentDescription = stringResource(R.string.steam_confirmation_partner_avatar),
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } ?: Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Default.VerifiedUser,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -4717,6 +4860,13 @@ private fun PendingLoginRow(
 
 private fun formatSteamLoginTime(timestampMillis: Long): String {
     return SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(timestampMillis))
+}
+
+private fun formatSteamRegistrationTime(timestampMillis: Long): String {
+    return java.text.DateFormat.getDateInstance(
+        java.text.DateFormat.MEDIUM,
+        Locale.getDefault()
+    ).format(Date(timestampMillis))
 }
 
 @Composable

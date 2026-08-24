@@ -69,6 +69,7 @@ internal fun MonicaSteamSharedSettingsHost(
     onOpenAppearance: () -> Unit,
     onOpenSteamFeatures: () -> Unit,
     compactHomeSections: List<SettingsNavigationSection> = emptyList(),
+    compactHomeColumns: Int = 1,
     additionalGroup: SteamSettingsAdditionalGroup = SteamSettingsAdditionalGroup.NONE,
     showNavigationBack: Boolean,
     modifier: Modifier,
@@ -127,6 +128,7 @@ internal fun MonicaSteamSharedSettingsHost(
         surfacePolicy = SettingsSurfacePolicy(
             showSecurityAnalysis = false,
             showMasterPasswordLocking = true,
+            showScreenshotProtection = true,
             showPermissionManagement = false,
             showTrash = false,
             showClearData = false,
@@ -162,6 +164,7 @@ internal fun MonicaSteamSharedSettingsHost(
         homeHeaderPullMaxDistance = SteamNetworkOptimizationPullMaxDistance,
         onHomeHeaderPullTriggered = onOpenNetworkOptimization,
         compactHomeSections = compactHomeSections,
+        compactHomeColumns = compactHomeColumns,
         appearanceSectionTitle = context.getString(R.string.settings_appearance_entry_title),
         applicationSectionTitle = context.getString(
             R.string.steam_settings_application_preferences_title

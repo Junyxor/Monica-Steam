@@ -18,7 +18,9 @@ data class SteamConfirmation(
     val headline: String,
     val summary: String,
     val imageUrl: String,
-    val creationTime: Long
+    val creationTime: Long,
+    /** SteamID64 of the other party for trade confirmations, when supplied by Steam. */
+    val partnerSteamId: String = ""
 )
 
 data class SteamBatchResult(
@@ -142,8 +144,28 @@ class SteamConfirmationService(
             headline = stringAny("headline", "creator") ?: "",
             summary = summaryText,
             imageUrl = imageUrl(),
-            creationTime = longAny("creation_time", "time") ?: 0L
+            creationTime = longAny("creation_time", "time") ?: 0L,
+            partnerSteamId = partnerSteamId()
         )
+    }
+
+    private fun JsonObject.partnerSteamId(): String {
+        val direct = stringAny(
+            "creator_id",
+            "creatorid",
+            "partner_steamid",
+            "partner_steam_id",
+            "steamid"
+        )
+        if (!direct.isNullOrBlank()) return direct
+        val details = this["details"] as? JsonObject ?: return ""
+        return details.stringAny(
+            "creator_id",
+            "creatorid",
+            "partner_steamid",
+            "partner_steam_id",
+            "steamid"
+        ).orEmpty()
     }
 
     private fun JsonObject.bool(key: String): Boolean? {

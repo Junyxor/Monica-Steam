@@ -2228,6 +2228,8 @@
     <string name="developer_share_logs">Share Logs</string>
     <string name="developer_share_logs_desc">Export and share recent logs</string>
     <string name="developer_functions">Developer Functions</string>
+    <string name="developer_show_achievement_sync_card">Show achievement sync card</string>
+    <string name="developer_show_achievement_sync_card_desc">Show achievement sync progress and failures in the game library. Background sync remains active when hidden.</string>
     <string name="disable_password_verification">Disable Password Verification</string>
     <string name="disable_password_verification_desc">Skip master password verification when the app starts. Use with caution because this reduces security.</string>
     <string name="developer_passkey_hyperos_biometric_bypass">Passkey HyperOS Compatibility</string>
@@ -4273,11 +4275,13 @@
     <string name="steam_library_achievement_percent">%1$d%%</string>
     <string name="steam_library_perfect_achievement">All achievements completed</string>
     <string name="steam_library_sync_all_achievements">Sync all achievements</string>
+    <string name="steam_library_force_resync_achievements">Force resync achievements</string>
     <string name="steam_library_syncing_achievements">Syncing achievements…</string>
     <string name="steam_library_syncing_achievements_progress">Syncing achievements %1$d/%2$d</string>
     <string name="steam_library_syncing_achievements_background">Completing the full achievement library in the background. You can keep using the library.</string>
     <string name="steam_library_achievement_sync_partial_failure">Some achievements could not be synced. Successful results were kept; retry to complete the remaining games.</string>
     <string name="steam_library_sync_started">Full achievement sync started</string>
+    <string name="steam_library_force_resync_started">Full achievement sync restarted</string>
     <string name="steam_library_sync_unavailable">Unable to sync now. Refresh the library or check the signed-in account.</string>
     <string name="steam_library_no_achievements">This game has no Steam achievements.</string>
     <string name="steam_library_retry">Retry</string>
@@ -4483,6 +4487,14 @@
     <string name="steam_confirmation_kind_family">Steam Families</string>
     <string name="steam_confirmation_kind_other">Other</string>
     <string name="steam_confirmation_details_title">Confirmation details</string>
+    <string name="steam_confirmation_partner_title">Trade partner</string>
+    <string name="steam_confirmation_partner_unknown">Unknown Steam user</string>
+    <string name="steam_confirmation_partner_loading">Loading partner profile…</string>
+    <string name="steam_confirmation_partner_level">Steam level %1$d</string>
+    <string name="steam_confirmation_partner_level_unknown">Steam level unavailable</string>
+    <string name="steam_confirmation_partner_registered">Registered %1$s</string>
+    <string name="steam_confirmation_partner_unavailable">Partner profile unavailable</string>
+    <string name="steam_confirmation_partner_avatar">Trade partner avatar</string>
     <string name="steam_confirmation_review_message">Review the recipient, item, amount and action before continuing. Approval or rejection requires identity verification.</string>
     <string name="steam_confirmation_original_type">Steam type: %1$s</string>
     <string name="steam_confirmation_recent_history">Recent confirmation activity</string>

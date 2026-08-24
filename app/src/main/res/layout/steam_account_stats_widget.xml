@@ -62,8 +62,11 @@
         android:layout_height="0dp"
         android:layout_marginTop="12dp"
         android:layout_weight="1"
+        android:background="@drawable/steam_widget_row_surface"
         android:gravity="center_vertical"
         android:orientation="horizontal"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="8dp"
         android:weightSum="3">
 
         <LinearLayout

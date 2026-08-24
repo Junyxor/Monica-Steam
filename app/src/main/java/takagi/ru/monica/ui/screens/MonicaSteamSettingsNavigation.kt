@@ -18,6 +18,8 @@ internal enum class SteamSettingsAdditionalGroup {
 
 internal fun buildMonicaSteamSettingsHomeSections(
     context: Context,
+    screenshotProtectionEnabled: Boolean,
+    onScreenshotProtectionChange: (Boolean) -> Unit,
     onOpenMasterPassword: () -> Unit,
     onOpenDataManagement: () -> Unit,
     onOpenAppearance: () -> Unit,
@@ -38,6 +40,19 @@ internal fun buildMonicaSteamSettingsHomeSections(
                     context.getString(R.string.security_questions)
                 ),
                 onClick = onOpenMasterPassword
+            ),
+            SettingsNavigationEntry(
+                icon = Icons.Default.Security,
+                title = context.getString(R.string.screenshot_protection),
+                subtitle = if (screenshotProtectionEnabled) {
+                    context.getString(R.string.screenshot_protection_enabled)
+                } else {
+                    context.getString(R.string.screenshot_protection_disabled)
+                },
+                searchTexts = listOf(context.getString(R.string.screenshot_protection)),
+                switchChecked = screenshotProtectionEnabled,
+                onSwitchChange = onScreenshotProtectionChange,
+                onClick = {}
             ),
             SettingsNavigationEntry(
                 icon = Icons.Default.Storage,

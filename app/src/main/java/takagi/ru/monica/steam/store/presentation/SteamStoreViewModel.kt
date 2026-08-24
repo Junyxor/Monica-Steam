@@ -2061,6 +2061,7 @@ class SteamStoreViewModel internal constructor(
                         sessionResolver = accountSourceRepository.sessionResolver(),
                         purchaseContextCache = SteamStorePurchasePreferencesCache(appContext),
                         libraryCacheRepository = SteamLibraryCacheRepository(
+                            appContext,
                             database.steamLibraryCacheDao(),
                             securityManager
                         ),

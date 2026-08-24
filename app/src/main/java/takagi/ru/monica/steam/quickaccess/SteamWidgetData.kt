@@ -41,6 +41,7 @@ internal object SteamWidgetDataLoader {
         val securityManager = SecurityManager(appContext)
         val accountRepository = SteamAccountRepository(database.steamAccountDao(), securityManager)
         val cacheRepository = SteamLibraryCacheRepository(
+            appContext,
             database.steamLibraryCacheDao(),
             securityManager
         )

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -50,6 +51,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -82,12 +84,14 @@ import takagi.ru.monica.R
 import takagi.ru.monica.autofill_ng.core.AutofillLogger
 import takagi.ru.monica.bitwarden.service.BitwardenDiagLogger
 import takagi.ru.monica.bitwarden.service.BitwardenSyncForensicsLogger
+import takagi.ru.monica.data.AppSettings
 import takagi.ru.monica.mdbx.MdbxDiagLogger
 import takagi.ru.monica.passkey.PasskeyValidationDiagnostics
 import takagi.ru.monica.security.SecurityDiagLogger
 import takagi.ru.monica.steam.diagnostics.LogcatCommandRunner
 import takagi.ru.monica.steam.diagnostics.SteamDiagLogger
 import takagi.ru.monica.steam.diagnostics.SteamCrashDiagnostics
+import takagi.ru.monica.utils.SettingsManager
 
 /**
  * 开发者设置页面
@@ -104,6 +108,8 @@ fun DeveloperSettingsScreen(
     val activity = remember(context) { context.findComponentActivity() }
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
+    val settingsManager = remember(context) { SettingsManager(context.applicationContext) }
+    val settings by settingsManager.settingsFlow.collectAsState(initial = AppSettings())
 
     var showDebugLogsDialog by remember { mutableStateOf(false) }
 
@@ -129,6 +135,22 @@ fun DeveloperSettingsScreen(
                 .padding(paddingValues)
                 .verticalScroll(scrollState)
         ) {
+            SettingsSection(
+                title = stringResource(R.string.developer_functions)
+            ) {
+                SettingsItemWithSwitch(
+                    icon = Icons.Default.Sync,
+                    title = stringResource(R.string.developer_show_achievement_sync_card),
+                    subtitle = stringResource(R.string.developer_show_achievement_sync_card_desc),
+                    checked = settings.showAchievementSyncCard,
+                    onCheckedChange = { enabled ->
+                        scope.launch {
+                            settingsManager.updateShowAchievementSyncCard(enabled)
+                        }
+                    }
+                )
+            }
+
             SettingsSection(
                 title = stringResource(R.string.developer_log_debugging)
             ) {

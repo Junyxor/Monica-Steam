@@ -71,6 +71,7 @@ abstract class BaseMonicaActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        configureEdgeToEdgeSystemBars()
 
         disableSystemAutofillForMonicaUi()
         
@@ -163,5 +164,12 @@ abstract class BaseMonicaActivity : FragmentActivity() {
         window?.decorView?.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
         findViewById<View?>(android.R.id.content)?.importantForAutofill =
             View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+    }
+
+    private fun configureEdgeToEdgeSystemBars() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+            window.isStatusBarContrastEnforced = false
+        }
     }
 }

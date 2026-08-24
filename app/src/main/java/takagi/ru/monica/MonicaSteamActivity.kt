@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubble
@@ -63,12 +64,18 @@ import takagi.ru.monica.steam.navigation.liquidglass.render.steamLiquidGlassBack
 import takagi.ru.monica.steam.navigation.liquidglass.ui.SteamLiquidGlassDock
 import takagi.ru.monica.steam.navigation.liquidglass.ui.SteamLiquidGlassDockVisibility
 import takagi.ru.monica.steam.navigation.ui.SteamEssentialsFloatingToolbar
+import takagi.ru.monica.steam.navigation.ui.SteamAdaptiveNavigationRail
 import takagi.ru.monica.steam.navigation.ui.SteamFixedBottomBar
 import takagi.ru.monica.steam.navigation.ui.SteamDockContentClearance
 import takagi.ru.monica.steam.navigation.ui.LocalSteamDockContentClearance
 import takagi.ru.monica.steam.navigation.ui.SteamToolbarItem
 import takagi.ru.monica.steam.navigation.ui.steamDockSwipe
 import takagi.ru.monica.steam.navigation.ui.steamDockProgressiveBlur
+import takagi.ru.monica.steam.navigation.ui.steamWindowHorizontalPadding
+import takagi.ru.monica.steam.navigation.ui.steamWindowStartPadding
+import takagi.ru.monica.steam.navigation.ui.steamWindowTopPadding
+import takagi.ru.monica.steam.navigation.ui.steamWindowBottomOnlyPadding
+import takagi.ru.monica.steam.navigation.ui.rememberSteamAdaptiveLayout
 import takagi.ru.monica.data.PasswordDatabase
 import takagi.ru.monica.data.ThemeMode
 import takagi.ru.monica.repository.PasswordRepository
@@ -298,6 +305,8 @@ class MonicaSteamActivity : BaseMonicaActivity() {
                 val liquidGlassBackdrop = rememberSteamLiquidGlassBackdrop()
                 val density = LocalDensity.current
                 val imeVisible = WindowInsets.ime.getBottom(density) > 0
+                val adaptiveLayout = rememberSteamAdaptiveLayout()
+                val useNavigationRail = adaptiveLayout.useNavigationRail && !imeVisible
                 val dockBlurHeightPx = with(density) { 130.dp.toPx() }
                 val dockVisible = shouldShowSteamDock(
                     hasConfiguration = true,
@@ -464,6 +473,10 @@ class MonicaSteamActivity : BaseMonicaActivity() {
                                         AnimatedContent(
                                             modifier = Modifier
                                                 .fillMaxSize()
+                                                .padding(
+                                                    start = if (useNavigationRail) 80.dp else 0.dp
+                                                )
+                                                .steamWindowHorizontalPadding()
                                                 .steamDockProgressiveBlur(
                                                     enabled = dockStyle == SteamDockStyle.M3E &&
                                                         dockVisible,
@@ -790,7 +803,30 @@ class MonicaSteamActivity : BaseMonicaActivity() {
                                 }
                     }
 
-                            if (dockStyle == SteamDockStyle.M3E && dockVisible) {
+                            if (useNavigationRail && dockVisible) {
+                                SteamAdaptiveNavigationRail(
+                                    modifier = Modifier
+                                        .align(Alignment.CenterStart)
+                                        .steamWindowStartPadding()
+                                        .steamWindowTopPadding()
+                                        .steamWindowBottomOnlyPadding()
+                                        .zIndex(2f),
+                                    order = when (dockStyle) {
+                                        SteamDockStyle.M3E -> listOf(SteamDockTab.TOKEN) +
+                                            SteamDockTab.completeOrder(dockOrder)
+                                        SteamDockStyle.LIQUID_GLASS ->
+                                            SteamDockTab.completeLiquidGlassOrder(liquidGlassDockOrder)
+                                        SteamDockStyle.FIXED ->
+                                            SteamDockTab.completeFixedOrder(fixedDockOrder)
+                                    },
+                                    selected = currentPage.toDockTab(),
+                                    onSelected = { tab ->
+                                        pageHistory = emptyList()
+                                        currentPage = tab.toPage()
+                                    }
+                                )
+                            }
+                            if (!useNavigationRail && dockStyle == SteamDockStyle.M3E && dockVisible) {
                                 SteamStandaloneDock(
                                     modifier = Modifier.align(Alignment.BottomCenter),
                                     order = dockOrder,
@@ -801,7 +837,7 @@ class MonicaSteamActivity : BaseMonicaActivity() {
                                     }
                                 )
                             }
-                            if (!imeVisible) {
+                            if (!useNavigationRail && !imeVisible) {
                                 SteamLiquidGlassDockVisibility(
                                     visible = dockStyle == SteamDockStyle.LIQUID_GLASS && dockVisible,
                                     modifier = Modifier
@@ -820,7 +856,7 @@ class MonicaSteamActivity : BaseMonicaActivity() {
                                     )
                                 }
                             }
-                            if (dockStyle == SteamDockStyle.FIXED && dockVisible) {
+                            if (!useNavigationRail && dockStyle == SteamDockStyle.FIXED && dockVisible) {
                                 SteamFixedBottomBar(
                                     modifier = Modifier
                                         .align(Alignment.BottomCenter)

@@ -88,6 +88,7 @@ import takagi.ru.monica.steam.library.SteamGameAchievements
 import takagi.ru.monica.steam.library.SteamGamePrice
 import takagi.ru.monica.steam.library.achievementSummaryOrNull
 import takagi.ru.monica.steam.library.isSteamSouthAsiaPriceCountry
+import takagi.ru.monica.steam.navigation.ui.rememberSteamAdaptiveLayout
 import takagi.ru.monica.steam.library.SteamLibraryFailureReason
 import takagi.ru.monica.steam.library.SteamLibrarySnapshot
 import takagi.ru.monica.steam.library.SteamLibraryViewModel
@@ -256,7 +257,7 @@ fun SteamLibraryScreen(
                                     SteamPageOverflowAction(
                                         label = stringResource(
                                             if (state.syncingAchievementProgress) {
-                                                R.string.steam_library_syncing_achievements
+                                                R.string.steam_library_force_resync_achievements
                                             } else {
                                                 R.string.steam_library_sync_all_achievements
                                             }
@@ -264,14 +265,18 @@ fun SteamLibraryScreen(
                                         icon = Icons.Default.Sync,
                                         enabled = selectedAccount != null &&
                                             state.snapshot?.accountId == selectedAccount.id &&
-                                            !state.loadingLibrary &&
-                                            !state.syncingAchievementProgress,
+                                            !state.loadingLibrary,
                                         onClick = {
+                                            val forceRestart = state.syncingAchievementProgress
                                             val started = viewModel.syncAllAchievementProgress()
                                             android.widget.Toast.makeText(
                                                 context,
                                                 if (started) {
-                                                    R.string.steam_library_sync_started
+                                                    if (forceRestart) {
+                                                        R.string.steam_library_force_resync_started
+                                                    } else {
+                                                        R.string.steam_library_sync_started
+                                                    }
                                                 } else {
                                                     R.string.steam_library_sync_unavailable
                                                 },
@@ -465,6 +470,8 @@ private fun SteamLibraryOverview(
     onSyncAllAchievements: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val adaptiveLayout = rememberSteamAdaptiveLayout()
+    val gameColumns = if (adaptiveLayout.useTwoPaneLayout) 2 else 1
     val dockContentClearance = LocalSteamDockContentClearance.current
     val context = androidx.compose.ui.platform.LocalContext.current
     val settingsManager = remember(context) { SettingsManager(context.applicationContext) }
@@ -494,7 +501,10 @@ private fun SteamLibraryOverview(
                 onOpenAccountDetails = onOpenAccountDetails
             )
         }
-        if (state.syncingAchievementProgress || state.achievementProgressFailure != null) {
+        if (
+            appSettings.showAchievementSyncCard &&
+            (state.syncingAchievementProgress || state.achievementProgressFailure != null)
+        ) {
             item(key = "achievement_progress_sync_status") {
                 SteamAchievementSyncStatus(
                     syncing = state.syncingAchievementProgress,
@@ -551,11 +561,36 @@ private fun SteamLibraryOverview(
                     item(key = "section_${section.type.name}") {
                         SteamGameSectionHeader(section)
                     }
-                    itemsIndexed(
-                        items = section.games,
-                        key = { _, game -> steamLibraryGameLazyKey(section.type, game) }
-                    ) { _, game ->
-                        SteamGameLibraryRow(game = game, onClick = { onOpenGame(game) })
+                    if (gameColumns == 1) {
+                        itemsIndexed(
+                            items = section.games,
+                            key = { _, game -> steamLibraryGameLazyKey(section.type, game) }
+                        ) { _, game ->
+                            SteamGameLibraryRow(game = game, onClick = { onOpenGame(game) })
+                        }
+                    } else {
+                        items(
+                            items = section.games.chunked(gameColumns),
+                            key = { row ->
+                                row.joinToString("_") { game ->
+                                    steamLibraryGameLazyKey(section.type, game)
+                                }
+                            }
+                        ) { row ->
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                row.forEach { game ->
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        SteamGameLibraryRow(
+                                            game = game,
+                                            onClick = { onOpenGame(game) }
+                                        )
+                                    }
+                                }
+                                repeat(gameColumns - row.size) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
                     }
                 }
             }

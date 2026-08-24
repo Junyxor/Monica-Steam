@@ -36,6 +36,7 @@ internal class SteamAchievementSyncCoordinator private constructor(
     private val database = SteamDatabase.getDatabase(appContext)
     private val repository = SteamAchievementSyncRepository(
         cacheRepository = SteamLibraryCacheRepository(
+            appContext,
             database.steamLibraryCacheDao(),
             SecurityManager(appContext)
         ),

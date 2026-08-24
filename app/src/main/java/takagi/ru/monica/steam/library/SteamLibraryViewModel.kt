@@ -270,9 +270,7 @@ class SteamLibraryViewModel internal constructor(
             source = _uiState.value.storageSource
         ) ?: accountSourceRepository.sessionHandle(account) ?: return false
         selectedAchievementSyncKey = handle.stableKey
-        val scheduled = coordinator.enqueue(handle, forceFull)
-        viewModelScope.launch { coordinator.refreshState(handle) }
-        return scheduled
+        return coordinator.enqueue(handle, forceFull)
     }
 
     private fun applyAchievementSyncState(sync: SteamAchievementSyncState?) {
@@ -895,6 +893,7 @@ class SteamLibraryViewModel internal constructor(
                     return SteamLibraryViewModel(
                         accountSourceRepository = accountSourceRepository,
                         cacheRepository = SteamLibraryCacheRepository(
+                            appContext,
                             database.steamLibraryCacheDao(),
                             securityManager
                         ),

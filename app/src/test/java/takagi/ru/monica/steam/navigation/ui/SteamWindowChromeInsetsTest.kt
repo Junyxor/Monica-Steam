@@ -82,6 +82,43 @@ class SteamWindowChromeInsetsTest {
         assertTrue(source.contains("SteamWindowChromeInsetMemory"))
     }
 
+    @Test
+    fun rootPagesConsumeHorizontalSafeDrawingInsetsOnce() {
+        val activity = projectFile(
+            "app/src/main/java/takagi/ru/monica/MonicaSteamActivity.kt"
+        ).readText()
+        val insets = projectFile(
+            "app/src/main/java/takagi/ru/monica/steam/navigation/ui/SteamWindowChromeInsets.kt"
+        ).readText()
+        val pageContainer = activity
+            .substringAfter("AnimatedContent(")
+            .substringBefore("targetState = currentPage")
+
+        assertTrue(pageContainer.contains(".steamWindowHorizontalPadding()"))
+        assertTrue(insets.contains("internal fun Modifier.steamWindowHorizontalPadding()"))
+        assertTrue(insets.contains("safeDrawing.getLeft(density, layoutDirection)"))
+        assertTrue(insets.contains("safeDrawing.getRight(density, layoutDirection)"))
+        assertTrue(insets.contains("WindowInsets(leftPx, 0, rightPx, 0)"))
+    }
+
+    @Test
+    fun landscapeNavigationRailConsumesItsOwnSafeEdges() {
+        val activity = projectFile(
+            "app/src/main/java/takagi/ru/monica/MonicaSteamActivity.kt"
+        ).readText()
+        val insets = projectFile(
+            "app/src/main/java/takagi/ru/monica/steam/navigation/ui/SteamWindowChromeInsets.kt"
+        ).readText()
+
+        val railModifier = activity
+            .substringAfter("SteamAdaptiveNavigationRail(")
+            .substringBefore("order = when")
+        assertTrue(railModifier.contains(".steamWindowStartPadding()"))
+        assertTrue(railModifier.contains(".steamWindowTopPadding()"))
+        assertTrue(railModifier.contains(".steamWindowBottomOnlyPadding()"))
+        assertTrue(insets.contains("internal fun Modifier.steamWindowStartPadding()"))
+    }
+
     private fun projectFile(path: String): File {
         var directory = File(requireNotNull(System.getProperty("user.dir"))).canonicalFile
         while (

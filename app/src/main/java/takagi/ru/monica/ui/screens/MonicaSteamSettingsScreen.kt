@@ -39,6 +39,7 @@ import takagi.ru.monica.steam.navigation.reorderDockOrder
 import takagi.ru.monica.steam.navigation.reorderFixedDockOrder
 import takagi.ru.monica.steam.navigation.reorderLiquidGlassDockOrder
 import takagi.ru.monica.steam.navigation.ui.LocalSteamDockContentClearance
+import takagi.ru.monica.steam.navigation.ui.rememberSteamAdaptiveLayout
 import takagi.ru.monica.steam.itad.ui.ItadSettingsScreen
 import takagi.ru.monica.steam.notifications.settings.ui.SteamNotificationSettingsScreen
 import takagi.ru.monica.steam.network.optimization.ui.SteamNetworkOptimizationAutoScreen
@@ -138,6 +139,7 @@ fun MonicaSteamSettingsScreen(
     val navigationScrollState = rememberScrollState()
     val context = LocalContext.current
     val dockContentClearance = LocalSteamDockContentClearance.current
+    val adaptiveLayout = rememberSteamAdaptiveLayout()
 
     val openMasterPasswordSettings: () -> Unit = {
         child = if (securityManager.isMasterPasswordSet()) {
@@ -146,9 +148,16 @@ fun MonicaSteamSettingsScreen(
             SteamSettingsChild.MASTER_PASSWORD_SETUP
         }
     }
-    val settingsHomeSections = remember(context, settings.language, securityManager) {
+    val settingsHomeSections = remember(
+        context,
+        settings.language,
+        settings.screenshotProtectionEnabled,
+        securityManager
+    ) {
         buildMonicaSteamSettingsHomeSections(
             context = context,
+            screenshotProtectionEnabled = settings.screenshotProtectionEnabled,
+            onScreenshotProtectionChange = settingsViewModel::updateScreenshotProtectionEnabled,
             onOpenMasterPassword = openMasterPasswordSettings,
             onOpenDataManagement = { child = SteamSettingsChild.DATA_MANAGEMENT },
             onOpenAppearance = { child = SteamSettingsChild.APPEARANCE },
@@ -195,6 +204,7 @@ fun MonicaSteamSettingsScreen(
             onOpenAppearance = { child = SteamSettingsChild.APPEARANCE },
             onOpenSteamFeatures = { child = SteamSettingsChild.STEAM_FEATURES },
             compactHomeSections = settingsHomeSections,
+            compactHomeColumns = if (adaptiveLayout.useTwoPaneLayout) 2 else 1,
             additionalGroup = additionalGroup,
             showNavigationBack = showBack,
             modifier = Modifier.fillMaxSize(),
@@ -204,7 +214,9 @@ fun MonicaSteamSettingsScreen(
 
     AnimatedContent(
         targetState = child,
-        modifier = modifier,
+        modifier = modifier.padding(
+            horizontal = if (adaptiveLayout.useTwoPaneLayout) 16.dp else 0.dp
+        ),
         transitionSpec = {
             easyNotesScreenEnter(settings.reduceAnimations)
                 .togetherWith(easyNotesScreenExit(settings.reduceAnimations))

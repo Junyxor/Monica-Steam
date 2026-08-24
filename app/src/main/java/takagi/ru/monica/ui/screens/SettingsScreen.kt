@@ -105,6 +105,25 @@ data class SettingsSurfacePolicy(
     val forceMonicaPlusActivated: Boolean = false
 )
 
+@Composable
+private fun VersionLinkButton(
+    title: String,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun SettingsScreen(
@@ -148,6 +167,7 @@ fun SettingsScreen(
     homeHeaderPullMaxDistance: Dp = 0.dp,
     onHomeHeaderPullTriggered: (() -> Unit)? = null,
     compactHomeSections: List<SettingsNavigationSection> = emptyList(),
+    compactHomeColumns: Int = 1,
     appearanceSectionTitle: String? = null,
     applicationSectionTitle: String? = null,
     onNavigateToDataManagement: () -> Unit = {},
@@ -1038,15 +1058,35 @@ fun SettingsScreen(
             }
 
             if (useCustomCompactHome) {
-                visibleCompactHomeSections.forEach { section ->
-                    SettingsSection(title = section.title) {
-                        section.entries.forEach { entry ->
-                            SettingsItem(
-                                icon = entry.icon,
-                                title = entry.title,
-                                subtitle = entry.subtitle,
-                                onClick = entry.onClick
-                            )
+                val resolvedColumns = compactHomeColumns.coerceAtLeast(1)
+                visibleCompactHomeSections.chunked(resolvedColumns).forEach { rowSections ->
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        rowSections.forEach { section ->
+                            Box(modifier = Modifier.weight(1f)) {
+                                SettingsSection(title = section.title) {
+                                    section.entries.forEach { entry ->
+                                    if (entry.switchChecked != null && entry.onSwitchChange != null) {
+                                        SettingsItemWithSwitch(
+                                            icon = entry.icon,
+                                            title = entry.title,
+                                            subtitle = entry.subtitle,
+                                            checked = entry.switchChecked,
+                                            onCheckedChange = entry.onSwitchChange
+                                        )
+                                    } else {
+                                        SettingsItem(
+                                            icon = entry.icon,
+                                            title = entry.title,
+                                            subtitle = entry.subtitle,
+                                            onClick = entry.onClick
+                                        )
+                                    }
+                                    }
+                                }
+                            }
+                        }
+                        repeat(resolvedColumns - rowSections.size) {
+                            Spacer(modifier = Modifier.weight(1f))
                         }
                     }
                 }
@@ -1671,7 +1711,7 @@ fun SettingsScreen(
             },
             title = { Text(stringResource(R.string.version_info_dialog_title)) },
             text = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     val githubUrl = SteamReleaseConfig.repositoryUrl
                     val websiteUrl = "https://joyinjoester.github.io/Monica/"
                     val iconSourceUrl = "https://github.com/stratumauth/app/tree/v1.4.0/icons"
@@ -1688,56 +1728,24 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = stringResource(R.string.version_info_github_label),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
+                    Spacer(modifier = Modifier.height(4.dp))
+                    VersionLinkButton(
+                        title = stringResource(R.string.version_info_github_label),
+                        onClick = { openExternalLink(githubUrl) }
                     )
-                    Text(
-                        text = githubUrl,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable { openExternalLink(githubUrl) }
+                    VersionLinkButton(
+                        title = stringResource(R.string.version_info_website_label),
+                        onClick = { openExternalLink(websiteUrl) }
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = stringResource(R.string.version_info_website_label),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
+                    VersionLinkButton(
+                        title = stringResource(R.string.version_info_icon_source_label),
+                        onClick = { openExternalLink(iconSourceUrl) }
                     )
-                    Text(
-                        text = websiteUrl,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable { openExternalLink(websiteUrl) }
+                    VersionLinkButton(
+                        title = stringResource(R.string.version_info_icon_release_label),
+                        onClick = { openExternalLink(iconReleaseUrl) }
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = stringResource(R.string.version_info_icon_source_label),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = iconSourceUrl,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable { openExternalLink(iconSourceUrl) }
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = stringResource(R.string.version_info_icon_release_label),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = iconReleaseUrl,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable { openExternalLink(iconReleaseUrl) }
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.version_info_simple_icons_note),
                         style = MaterialTheme.typography.bodySmall,

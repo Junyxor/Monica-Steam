@@ -9,6 +9,8 @@ data class SettingsNavigationEntry(
     val title: String,
     val subtitle: String,
     val searchTexts: List<String> = emptyList(),
+    val switchChecked: Boolean? = null,
+    val onSwitchChange: ((Boolean) -> Unit)? = null,
     val onClick: () -> Unit
 )
 

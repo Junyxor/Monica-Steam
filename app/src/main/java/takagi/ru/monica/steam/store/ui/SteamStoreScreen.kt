@@ -136,6 +136,7 @@ import takagi.ru.monica.steam.store.hints.domain.SteamStoreHintSettings
 import takagi.ru.monica.steam.store.hints.domain.resolveSteamStoreDetailHints
 import takagi.ru.monica.steam.store.hints.domain.resolveSteamStoreItemHints
 import takagi.ru.monica.steam.store.hints.ui.SteamStoreHintBadges
+import takagi.ru.monica.steam.navigation.ui.rememberSteamAdaptiveLayout
 import takagi.ru.monica.steam.store.gift.ui.SteamStoreGiftPurchaseSplitButton
 import takagi.ru.monica.steam.store.gift.ui.SteamStoreGiftRecipientSheet
 import takagi.ru.monica.steam.store.gift.data.steamStoreCheckoutAutomationFactory
@@ -222,6 +223,8 @@ fun SteamStoreScreen(
     }
     val reduceAnimations = LocalReduceAnimations.current
     val dockContentClearance = LocalSteamDockContentClearance.current
+    val adaptiveLayout = rememberSteamAdaptiveLayout()
+    val storeColumns = if (adaptiveLayout.useTwoPaneLayout) 2 else 1
     val storeRefreshing = state.loadingHome || state.loadingCatalog || state.searching
     val refreshStore = {
         viewModel.refreshHintSources()
@@ -615,7 +618,10 @@ fun SteamStoreScreen(
                         if (state.searchResults.isEmpty()) {
                             item { StoreMessage(stringResource(R.string.steam_store_empty)) }
                         } else {
-                            itemsIndexed(state.searchResults, key = ::steamStoreLazyKey) { _, item ->
+                            storeAdaptiveItems(
+                                games = state.searchResults,
+                                columns = storeColumns
+                            ) { item ->
                                 SearchResultCard(
                                     game = item,
                                     hints = itemHints(item.appId),
@@ -639,7 +645,10 @@ fun SteamStoreScreen(
                         if (!state.loadingCatalog && catalogItems.isEmpty() && state.catalogError == null) {
                             item { StoreMessage(stringResource(R.string.steam_store_filter_empty)) }
                         } else {
-                            itemsIndexed(catalogItems, key = ::steamStoreLazyKey) { _, item ->
+                            storeAdaptiveItems(
+                                games = catalogItems,
+                                columns = storeColumns
+                            ) { item ->
                                 SearchResultCard(
                                     game = item,
                                     hints = itemHints(item.appId),
@@ -975,6 +984,33 @@ internal fun StoreSection(
 
 internal fun steamStoreLazyKey(index: Int, item: SteamStoreItem): String =
     "${item.appId}-$index"
+
+private fun androidx.compose.foundation.lazy.LazyListScope.storeAdaptiveItems(
+    games: List<SteamStoreItem>,
+    columns: Int,
+    content: @Composable (SteamStoreItem) -> Unit
+) {
+    if (columns <= 1) {
+        itemsIndexed(games, key = ::steamStoreLazyKey) { _, game -> content(game) }
+        return
+    }
+
+    items(
+        items = games.chunked(columns),
+        key = { row -> row.joinToString("_") { game -> game.appId.toString() } }
+    ) { row ->
+        Row(modifier = Modifier.fillMaxWidth()) {
+            row.forEach { game ->
+                Box(modifier = Modifier.weight(1f)) {
+                    content(game)
+                }
+            }
+            repeat(columns - row.size) {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
 
 internal fun steamStoreRegionalPriceLazyKey(index: Int, price: SteamRegionalPrice): String =
     "${price.countryCode.uppercase(Locale.ROOT)}-$index"

@@ -2076,6 +2076,8 @@
     <string name="developer_share_logs">分享日志</string>
     <string name="developer_share_logs_desc">导出并分享最近的日志</string>
     <string name="developer_functions">开发者功能</string>
+    <string name="developer_show_achievement_sync_card">显示成就同步卡片</string>
+    <string name="developer_show_achievement_sync_card_desc">在游戏库显示成就同步进度与失败状态。关闭后后台同步仍会继续。</string>
     <string name="disable_password_verification">关闭密码验证</string>
     <string name="disable_password_verification_desc">跳过应用启动时的主密码验证。开启后应用将直接进入，请谨慎使用。</string>
     <string name="developer_passkey_hyperos_biometric_bypass">Passkey HyperOS 兼容</string>
@@ -4103,11 +4105,13 @@
     <string name="steam_library_achievement_percent">%1$d%%</string>
     <string name="steam_library_perfect_achievement">已完成全部成就</string>
     <string name="steam_library_sync_all_achievements">同步全部成就</string>
+    <string name="steam_library_force_resync_achievements">强制重新同步成就</string>
     <string name="steam_library_syncing_achievements">正在同步成就…</string>
     <string name="steam_library_syncing_achievements_progress">正在同步成就 %1$d/%2$d</string>
     <string name="steam_library_syncing_achievements_background">正在后台补全整库成就，期间可以继续使用游戏库。</string>
     <string name="steam_library_achievement_sync_partial_failure">部分成就同步失败，成功结果已经保留；重试将继续补全剩余内容。</string>
     <string name="steam_library_sync_started">已开始同步全部成就</string>
+    <string name="steam_library_force_resync_started">已强制重新开始同步全部成就</string>
     <string name="steam_library_sync_unavailable">当前无法同步，请先刷新游戏库或检查登录状态。</string>
     <string name="steam_library_no_achievements">这个游戏没有 Steam 成就。</string>
     <string name="steam_library_retry">重试</string>
@@ -4313,6 +4317,14 @@
     <string name="steam_confirmation_kind_family">Steam 家庭</string>
     <string name="steam_confirmation_kind_other">其他</string>
     <string name="steam_confirmation_details_title">确认详情</string>
+    <string name="steam_confirmation_partner_title">交易对方</string>
+    <string name="steam_confirmation_partner_unknown">未知 Steam 用户</string>
+    <string name="steam_confirmation_partner_loading">正在加载对方资料…</string>
+    <string name="steam_confirmation_partner_level">Steam 等级 %1$d</string>
+    <string name="steam_confirmation_partner_level_unknown">Steam 等级不可用</string>
+    <string name="steam_confirmation_partner_registered">注册于 %1$s</string>
+    <string name="steam_confirmation_partner_unavailable">对方资料暂不可用</string>
+    <string name="steam_confirmation_partner_avatar">交易对方头像</string>
     <string name="steam_confirmation_review_message">继续前请复核接收方、物品、金额和操作内容。批准或拒绝仍需验证身份。</string>
     <string name="steam_confirmation_original_type">Steam 类型：%1$s</string>
     <string name="steam_confirmation_recent_history">最近确认活动</string>

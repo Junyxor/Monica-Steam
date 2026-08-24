@@ -116,7 +116,10 @@ internal object SteamWidgetRenderer {
             if (game.isCurrentlyPlaying) context.getString(R.string.steam_widget_now_playing)
             else SteamWidgetDataLoader.formatGamePlaytime(game.playtimeMinutes)
         )
-        views.setTextViewText(stateId, if (game.isCurrentlyPlaying) "●" else "")
+        views.setTextViewText(
+            stateId,
+            if (game.isCurrentlyPlaying) context.getString(R.string.steam_widget_now_playing) else ""
+        )
         game.image?.let { views.setImageViewBitmap(imageId, it) }
     }
 

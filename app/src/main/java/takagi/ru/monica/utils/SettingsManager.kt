@@ -267,6 +267,7 @@ class SettingsManager(private val context: Context) {
         
         // 减少动画 - 解决部分设备动画卡顿问题
         private val REDUCE_ANIMATIONS_KEY = booleanPreferencesKey("reduce_animations")
+        private val SHOW_ACHIEVEMENT_SYNC_CARD_KEY = booleanPreferencesKey("show_achievement_sync_card")
 
         // 智能去重
         private val SMART_DEDUPLICATION_ENABLED_KEY = booleanPreferencesKey("smart_deduplication_enabled")
@@ -693,6 +694,7 @@ class SettingsManager(private val context: Context) {
                 paymentInfo = preferences[FIELD_PAYMENT_INFO_KEY] ?: true
             ),
             reduceAnimations = preferences[REDUCE_ANIMATIONS_KEY] ?: false,
+            showAchievementSyncCard = preferences[SHOW_ACHIEVEMENT_SYNC_CARD_KEY] ?: false,
             smartDeduplicationEnabled = preferences[SMART_DEDUPLICATION_ENABLED_KEY] ?: true,
             separateUsernameAccountEnabled = preferences[SEPARATE_USERNAME_ACCOUNT_ENABLED_KEY] ?: false,
             keepassDxLikeMutationEnabled = preferences[KEEPASS_DX_LIKE_MUTATION_ENABLED_KEY] ?: false,
@@ -1657,6 +1659,12 @@ class SettingsManager(private val context: Context) {
     suspend fun updateReduceAnimations(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[REDUCE_ANIMATIONS_KEY] = enabled
+        }
+    }
+
+    suspend fun updateShowAchievementSyncCard(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[SHOW_ACHIEVEMENT_SYNC_CARD_KEY] = enabled
         }
     }
 

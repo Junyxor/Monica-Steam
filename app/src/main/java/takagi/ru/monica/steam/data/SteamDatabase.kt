@@ -183,6 +183,7 @@ abstract class SteamDatabase : RoomDatabase() {
             }
         }
 
+
         private fun encryptExistingSteamRows(
             db: SupportSQLiteDatabase,
             securityManager: SecurityManager

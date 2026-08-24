@@ -28,6 +28,18 @@ class SteamConfirmationServiceTest {
         assertEquals("Session expired", error.message)
     }
 
+    @Test
+    fun fetchParsesTradePartnerSteamIdWhenSteamProvidesCreatorId() {
+        val service = serviceFor(
+            """{"success":true,"conf":[{"id":"1","nonce":"2","type":2,"creator_id":"76561198000000002","headline":"Partner"}]}"""
+        )
+
+        assertEquals(
+            "76561198000000002",
+            service.fetch(account(), nowSeconds = 1L).single().partnerSteamId
+        )
+    }
+
     private fun serviceFor(payload: String): SteamConfirmationService {
         val client = OkHttpClient.Builder()
             .addInterceptor { chain ->
