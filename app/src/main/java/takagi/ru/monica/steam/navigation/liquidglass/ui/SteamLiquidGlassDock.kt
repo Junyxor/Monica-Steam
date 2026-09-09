@@ -49,6 +49,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,6 +79,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.zIndex
+import kotlinx.coroutines.android.awaitFrame
+import kotlinx.coroutines.launch
 import takagi.ru.monica.R
 import takagi.ru.monica.steam.navigation.SteamDockTab
 import takagi.ru.monica.steam.navigation.liquidglass.motion.LiquidGlassDockMotionState
@@ -206,6 +209,9 @@ internal fun SteamLiquidGlassDock(
 
     val selectedIndex = tabs.indexOf(selected)
     val haptic = rememberHapticFeedback()
+    val selectionScope = rememberCoroutineScope()
+    val currentOnSelected by rememberUpdatedState(onSelected)
+    val selectionGeneration = remember { intArrayOf(0) }
     val motionState = rememberLiquidGlassDockMotionState(
         initialIndex = selectedIndex.coerceAtLeast(0),
         itemCount = tabs.size,
@@ -213,7 +219,7 @@ internal fun SteamLiquidGlassDock(
         onIndexChanged = { index ->
             tabs.getOrNull(index)?.let { tab ->
                 haptic.performLightClick()
-                onSelected(tab)
+                currentOnSelected(tab)
             }
         }
     )
@@ -483,7 +489,14 @@ internal fun SteamLiquidGlassDock(
                         onClick = {
                             motionState.updateIndex(index)
                             haptic.performLightClick()
-                            onSelected(tab)
+                            val generation = ++selectionGeneration[0]
+                            selectionScope.launch {
+                                // Start indicator deformation/translation before composing a cold page.
+                                awaitFrame()
+                                if (selectionGeneration[0] == generation) {
+                                    currentOnSelected(tab)
+                                }
+                            }
                         }
                     )
                 }
