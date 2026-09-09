@@ -25,7 +25,7 @@ mkdir -p "$JNI_OUTPUT"
 (
   cd "$RUST_DIR"
   cargo ndk \
-    -p 26 \
+    --platform 26 \
     -t arm64-v8a \
     -t armeabi-v7a \
     -o "$JNI_OUTPUT" \
