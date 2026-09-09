@@ -25,7 +25,13 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +43,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.android.awaitFrame
+import kotlinx.coroutines.launch
 import takagi.ru.monica.steam.navigation.SteamDockTab
 import takagi.ru.monica.steam.navigation.dockSwipeTarget
 import takagi.ru.monica.ui.LocalReduceAnimations
@@ -144,6 +152,27 @@ internal fun SteamEssentialsFloatingToolbar(
     val isLargeFont = fontScale > 1.25f
     val isCompactScreen = screenWidth < 400
     val shouldHideLabel = isLargeFont || (isCompactScreen && items.size > 3)
+    val scope = rememberCoroutineScope()
+    val selectionGeneration = remember { intArrayOf(0) }
+    val latestItems by rememberUpdatedState(items)
+    var optimisticSelectedIndex by remember { mutableIntStateOf(selectedIndex) }
+
+    LaunchedEffect(selectedIndex) {
+        optimisticSelectedIndex = selectedIndex
+    }
+
+    fun selectAfterVisualCommit(index: Int) {
+        if (index == optimisticSelectedIndex) return
+        optimisticSelectedIndex = index
+        val generation = ++selectionGeneration[0]
+        scope.launch {
+            // Paint the selected dock item first; compose the heavy target page next frame.
+            awaitFrame()
+            if (selectionGeneration[0] == generation) {
+                latestItems.getOrNull(index)?.onClick?.invoke()
+            }
+        }
+    }
 
     HorizontalFloatingToolbar(
         modifier = modifier
@@ -158,7 +187,7 @@ internal fun SteamEssentialsFloatingToolbar(
         )
     ) {
         items.forEachIndexed { index, item ->
-            val isSelected = selectedIndex == index
+            val isSelected = optimisticSelectedIndex == index
             val itemWidth by animateDpAsState(
                 targetValue = if (expanded || isSelected) 48.dp else 0.dp,
                 animationSpec = if (reduceAnimations) {
@@ -198,7 +227,7 @@ internal fun SteamEssentialsFloatingToolbar(
 
             if (itemWidth > 0.dp || isSelected) {
                 IconButton(
-                    onClick = item.onClick,
+                    onClick = { selectAfterVisualCommit(index) },
                     modifier = Modifier
                         .width(itemWidth + labelWidth)
                         .height(48.dp),
