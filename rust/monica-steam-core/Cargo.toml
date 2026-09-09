@@ -1,0 +1,16 @@
+[package]
+name = "monica-steam-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "GPL-3.0-only"
+publish = false
+
+[lib]
+name = "monica_steam_core"
+crate-type = ["rlib"]
+
+[dependencies]
+base64 = "0.22"
+hmac = "0.12"
+sha1 = "0.10"
