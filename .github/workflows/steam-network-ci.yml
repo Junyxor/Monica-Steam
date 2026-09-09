@@ -26,7 +26,7 @@ jobs:
 
   rust-android-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       ANDROID_NDK_VERSION: 27.2.12479018
     steps:
@@ -41,6 +41,9 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Set up Rust Android targets
         uses: dtolnay/rust-toolchain@stable
@@ -72,6 +75,19 @@ jobs:
           test -s app/src/main/jniLibs/armeabi-v7a/libmonica_steam_android.so
           file app/src/main/jniLibs/arm64-v8a/libmonica_steam_android.so
           file app/src/main/jniLibs/armeabi-v7a/libmonica_steam_android.so
+
+      - name: Assemble APKs with Rust core
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Verify Rust libraries inside APKs
+        shell: bash
+        run: |
+          find app/build/outputs/apk -type f -name '*.apk' -print -exec unzip -l {} \; > apk-contents.txt
+          grep -q 'lib/arm64-v8a/libmonica_steam_android.so' apk-contents.txt
+          grep -q 'lib/armeabi-v7a/libmonica_steam_android.so' apk-contents.txt
 
   network-tests:
     runs-on: ubuntu-latest
