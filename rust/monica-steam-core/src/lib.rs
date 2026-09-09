@@ -44,9 +44,10 @@ pub fn generate_confirmation_hash(
     tag: &str,
 ) -> Result<String, SteamCoreError> {
     let key = decode_secret(identity_secret_base64)?;
-    let mut payload = Vec::with_capacity(8 + tag.len().min(MAX_CONFIRMATION_TAG_CHARS));
+    let truncated_tag: String = tag.chars().take(MAX_CONFIRMATION_TAG_CHARS).collect();
+    let mut payload = Vec::with_capacity(8 + truncated_tag.len());
     payload.extend_from_slice(&(unix_time_seconds as u64).to_be_bytes());
-    payload.extend(tag.chars().take(MAX_CONFIRMATION_TAG_CHARS).flat_map(char::to_string).flat_map(String::into_bytes));
+    payload.extend_from_slice(truncated_tag.as_bytes());
     Ok(BASE64.encode(hmac_sha1(&key, &payload)?))
 }
 
@@ -72,7 +73,10 @@ fn decode_secret(encoded_secret: &str) -> Result<Vec<u8>, SteamCoreError> {
 fn hmac_sha1(key: &[u8], payload: &[u8]) -> Result<[u8; 20], SteamCoreError> {
     let mut mac = HmacSha1::new_from_slice(key).map_err(|_| SteamCoreError::HmacInitialization)?;
     mac.update(payload);
-    Ok(mac.finalize().into_bytes().into())
+    let bytes = mac.finalize().into_bytes();
+    let mut output = [0u8; 20];
+    output.copy_from_slice(&bytes);
+    Ok(output)
 }
 
 #[cfg(test)]
