@@ -1,3 +1,4 @@
+pub mod cm;
 pub mod proto;
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
