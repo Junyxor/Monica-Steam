@@ -4,12 +4,14 @@ pub mod proto;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use hmac::{Hmac, Mac};
 use sha1::Sha1;
+use sha2::Sha256;
 
 const STEAM_CODE_CHARS: &[u8] = b"23456789BCDFGHJKMNPQRTVWXY";
 const STEAM_CODE_PERIOD_SECONDS: i64 = 30;
 const MAX_CONFIRMATION_TAG_CHARS: usize = 32;
 
 type HmacSha1 = Hmac<Sha1>;
+type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SteamCoreError {
@@ -54,6 +56,28 @@ pub fn generate_confirmation_hash(
     Ok(BASE64.encode(hmac_sha1(&key, &payload)?))
 }
 
+pub fn generate_login_approval_signature(
+    shared_secret_base64: &str,
+    version: i32,
+    client_id: i64,
+    steam_id: i64,
+) -> Result<Vec<u8>, SteamCoreError> {
+    let key = decode_secret(shared_secret_base64)?;
+    let mut payload = Vec::with_capacity(18);
+    payload.extend_from_slice(&(version as u16).to_le_bytes());
+    payload.extend_from_slice(&client_id.to_le_bytes());
+    payload.extend_from_slice(&steam_id.to_le_bytes());
+    Ok(hmac_sha256(&key, &payload)?.to_vec())
+}
+
+pub fn generate_login_token_signature(
+    shared_secret_base64: &str,
+    token_id: i64,
+) -> Result<Vec<u8>, SteamCoreError> {
+    let key = decode_secret(shared_secret_base64)?;
+    Ok(hmac_sha256(&key, &token_id.to_le_bytes())?.to_vec())
+}
+
 pub fn seconds_remaining(unix_time_seconds: i64) -> i32 {
     let elapsed = unix_time_seconds.rem_euclid(STEAM_CODE_PERIOD_SECONDS);
     (STEAM_CODE_PERIOD_SECONDS - elapsed) as i32
@@ -82,6 +106,15 @@ fn hmac_sha1(key: &[u8], payload: &[u8]) -> Result<[u8; 20], SteamCoreError> {
     Ok(output)
 }
 
+fn hmac_sha256(key: &[u8], payload: &[u8]) -> Result<[u8; 32], SteamCoreError> {
+    let mut mac = HmacSha256::new_from_slice(key).map_err(|_| SteamCoreError::HmacInitialization)?;
+    mac.update(payload);
+    let bytes = mac.finalize().into_bytes();
+    let mut output = [0u8; 32];
+    output.copy_from_slice(&bytes);
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,6 +136,26 @@ mod tests {
         assert_eq!(
             generate_confirmation_hash("aWRlbnRpdHktc2VjcmV0", 1_700_000_000, "allow").unwrap(),
             "iNx1Np0OF7LQP1OxGT+WU1Z8Gdc="
+        );
+    }
+
+    #[test]
+    fn login_approval_signatures_match_kotlin_reference_vectors() {
+        assert_eq!(
+            BASE64.encode(generate_login_approval_signature(
+                "dGVzdC1zZWNyZXQ=",
+                2,
+                123_456_789,
+                765_611_980_000_000_00,
+            ).unwrap()),
+            "NydAqkAdjX65Ej6xXzoCBv2L4U/cZOydNDZTX/YtzSE="
+        );
+        assert_eq!(
+            BASE64.encode(generate_login_token_signature(
+                "dGVzdC1zZWNyZXQ=",
+                9_876_543_210,
+            ).unwrap()),
+            "uloBcT3MRJ3lJixXKCTLGyapcUMhBe9obzY29WPHLp4="
         );
     }
 
