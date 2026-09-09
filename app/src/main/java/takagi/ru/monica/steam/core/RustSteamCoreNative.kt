@@ -34,6 +34,33 @@ internal object RustSteamCoreNative {
         }.getOrNull()?.takeIf { it.isNotEmpty() }
     }
 
+    fun generateLoginApprovalSignatureOrNull(
+        sharedSecretBase64: String,
+        version: Int,
+        clientId: Long,
+        steamId: Long
+    ): ByteArray? {
+        if (!loaded) return null
+        return runCatching {
+            nativeGenerateLoginApprovalSignature(
+                sharedSecretBase64 = sharedSecretBase64,
+                version = version,
+                clientId = clientId,
+                steamId = steamId
+            )
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
+    fun generateLoginTokenSignatureOrNull(
+        sharedSecretBase64: String,
+        tokenId: Long
+    ): ByteArray? {
+        if (!loaded) return null
+        return runCatching {
+            nativeGenerateLoginTokenSignature(sharedSecretBase64, tokenId)
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
     fun encodeCmMessageOrNull(
         eMsg: Int,
         steamId: Long,
@@ -76,6 +103,20 @@ internal object RustSteamCoreNative {
         unixTimeSeconds: Long,
         tag: String
     ): String
+
+    @JvmStatic
+    private external fun nativeGenerateLoginApprovalSignature(
+        sharedSecretBase64: String,
+        version: Int,
+        clientId: Long,
+        steamId: Long
+    ): ByteArray
+
+    @JvmStatic
+    private external fun nativeGenerateLoginTokenSignature(
+        sharedSecretBase64: String,
+        tokenId: Long
+    ): ByteArray
 
     @JvmStatic
     private external fun nativeEncodeCmMessage(
