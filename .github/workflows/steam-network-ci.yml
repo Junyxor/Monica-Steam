@@ -11,6 +11,19 @@ permissions:
   contents: read
 
 jobs:
+  rust-core-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Test Rust Steam core
+        run: cargo test --manifest-path rust/Cargo.toml --workspace --all-targets
+
   network-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 45
