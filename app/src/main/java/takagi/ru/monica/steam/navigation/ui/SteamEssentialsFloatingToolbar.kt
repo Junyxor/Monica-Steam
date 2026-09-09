@@ -194,8 +194,8 @@ internal fun SteamEssentialsFloatingToolbar(
                     tween<Dp>(durationMillis = REDUCED_MOTION_DURATION_MILLIS)
                 } else {
                     spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
                     )
                 },
                 label = "steam_toolbar_item_width_$index"
@@ -206,8 +206,8 @@ internal fun SteamEssentialsFloatingToolbar(
                     tween<Dp>(durationMillis = REDUCED_MOTION_DURATION_MILLIS)
                 } else {
                     spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
                     )
                 },
                 label = "steam_toolbar_label_width_$index"
@@ -218,8 +218,8 @@ internal fun SteamEssentialsFloatingToolbar(
                     tween<Dp>(durationMillis = REDUCED_MOTION_DURATION_MILLIS)
                 } else {
                     spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
                     )
                 },
                 label = "steam_toolbar_spacer_width_$index"
