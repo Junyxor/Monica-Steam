@@ -85,7 +85,13 @@ jobs:
       - name: Verify Rust libraries inside APKs
         shell: bash
         run: |
-          find app/build/outputs/apk -type f -name '*.apk' -print -exec unzip -l {} \; > apk-contents.txt
+          mapfile -t apks < <(find app/build/outputs/apk -type f -iname '*.apk' -print)
+          test "${#apks[@]}" -gt 0
+          : > apk-contents.txt
+          for apk in "${apks[@]}"; do
+            echo "Inspecting $apk"
+            unzip -l "$apk" | tee -a apk-contents.txt
+          done
           grep -q 'lib/arm64-v8a/libmonica_steam_android.so' apk-contents.txt
           grep -q 'lib/armeabi-v7a/libmonica_steam_android.so' apk-contents.txt
 
