@@ -34,11 +34,6 @@ internal object RustSteamCoreNative {
         }.getOrNull()?.takeIf { it.isNotEmpty() }
     }
 
-    fun secondsRemainingOrNull(unixTimeSeconds: Long): Int? {
-        if (!loaded) return null
-        return runCatching { nativeSecondsRemaining(unixTimeSeconds) }.getOrNull()
-    }
-
     @JvmStatic
     private external fun nativeGenerateAuthCode(
         sharedSecretBase64: String,
@@ -51,7 +46,4 @@ internal object RustSteamCoreNative {
         unixTimeSeconds: Long,
         tag: String
     ): String
-
-    @JvmStatic
-    private external fun nativeSecondsRemaining(unixTimeSeconds: Long): Int
 }
