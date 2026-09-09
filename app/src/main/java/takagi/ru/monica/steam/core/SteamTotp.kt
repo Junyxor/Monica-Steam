@@ -30,9 +30,9 @@ object SteamTotp {
         return generateConfirmationHashKotlin(identitySecretBase64, unixTimeSeconds, tag)
     }
 
+    // This runs once per UI tick. A local modulo is cheaper than crossing JNI every second.
     fun secondsRemaining(unixTimeSeconds: Long): Int =
-        RustSteamCoreNative.secondsRemainingOrNull(unixTimeSeconds)
-            ?: (30L - (unixTimeSeconds % 30L)).toInt()
+        (30L - Math.floorMod(unixTimeSeconds, 30L)).toInt()
 
     private fun generateAuthCodeKotlin(
         sharedSecretBase64: String,
