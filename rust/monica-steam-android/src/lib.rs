@@ -1,9 +1,9 @@
 use jni::{
     objects::{JClass, JString},
-    sys::{jint, jlong, jstring},
+    sys::{jlong, jstring},
     JNIEnv,
 };
-use monica_steam_core::{generate_auth_code, generate_confirmation_hash, seconds_remaining};
+use monica_steam_core::{generate_auth_code, generate_confirmation_hash};
 use std::ptr;
 
 fn read_jstring(env: &mut JNIEnv<'_>, value: &JString<'_>) -> Option<String> {
@@ -48,13 +48,4 @@ pub extern "system" fn Java_takagi_ru_monica_steam_core_RustSteamCoreNative_nati
     let hash = generate_confirmation_hash(&identity_secret, unix_time_seconds, &tag)
         .unwrap_or_default();
     write_jstring(&mut env, hash)
-}
-
-#[no_mangle]
-pub extern "system" fn Java_takagi_ru_monica_steam_core_RustSteamCoreNative_nativeSecondsRemaining(
-    _env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    unix_time_seconds: jlong,
-) -> jint {
-    seconds_remaining(unix_time_seconds)
 }
