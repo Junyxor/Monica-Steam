@@ -34,6 +34,36 @@ internal object RustSteamCoreNative {
         }.getOrNull()?.takeIf { it.isNotEmpty() }
     }
 
+    fun encodeCmMessageOrNull(
+        eMsg: Int,
+        steamId: Long,
+        sessionId: Int,
+        body: ByteArray,
+        jobIdSource: Long,
+        jobIdTarget: Long,
+        targetJobName: String?
+    ): ByteArray? {
+        if (!loaded) return null
+        return runCatching {
+            nativeEncodeCmMessage(
+                eMsg = eMsg,
+                steamId = steamId,
+                sessionId = sessionId,
+                body = body,
+                jobIdSource = jobIdSource,
+                jobIdTarget = jobIdTarget,
+                targetJobName = targetJobName.orEmpty()
+            )
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
+    fun webLogonBodyOrNull(webLogonToken: String): ByteArray? {
+        if (!loaded) return null
+        return runCatching { nativeWebLogonBody(webLogonToken) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
     @JvmStatic
     private external fun nativeGenerateAuthCode(
         sharedSecretBase64: String,
@@ -46,4 +76,18 @@ internal object RustSteamCoreNative {
         unixTimeSeconds: Long,
         tag: String
     ): String
+
+    @JvmStatic
+    private external fun nativeEncodeCmMessage(
+        eMsg: Int,
+        steamId: Long,
+        sessionId: Int,
+        body: ByteArray,
+        jobIdSource: Long,
+        jobIdTarget: Long,
+        targetJobName: String
+    ): ByteArray
+
+    @JvmStatic
+    private external fun nativeWebLogonBody(webLogonToken: String): ByteArray
 }
