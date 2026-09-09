@@ -24,7 +24,7 @@ pub struct ProtoField {
 
 impl ProtoField {
     pub fn wire_type(&self) -> u8 {
-        match self.value {
+        match &self.value {
             ProtoValue::Varint(_) => 0,
             ProtoValue::Fixed64(_) => 1,
             ProtoValue::Bytes(_) => 2,
@@ -33,9 +33,9 @@ impl ProtoField {
     }
 
     pub fn as_i64(&self) -> Option<i64> {
-        match self.value {
-            ProtoValue::Varint(value) | ProtoValue::Fixed64(value) => Some(value as i64),
-            ProtoValue::Fixed32(value) => Some(value as i64),
+        match &self.value {
+            ProtoValue::Varint(value) | ProtoValue::Fixed64(value) => Some(*value as i64),
+            ProtoValue::Fixed32(value) => Some(*value as i64),
             ProtoValue::Bytes(_) => None,
         }
     }
@@ -86,7 +86,7 @@ impl ProtoWriter {
     }
 
     pub fn write_bool(&mut self, field: u32, value: bool) -> Result<(), ProtoError> {
-        self.write_varint(field, i64::from(value))
+        self.write_varint(field, if value { 1 } else { 0 })
     }
 
     pub fn write_string(&mut self, field: u32, value: &str) -> Result<(), ProtoError> {
@@ -253,7 +253,12 @@ mod tests {
         assert_eq!(fields[2].as_utf8_lossy().as_deref(), Some("steam"));
         assert_eq!(fields[3].as_i64(), Some(-2));
         assert_eq!(fields[4].as_i64(), Some(u32::MAX as i64));
-        assert_eq!(parse_all(fields[5].as_bytes().unwrap()).unwrap()[0].as_utf8_lossy().as_deref(), Some("nested"));
+        assert_eq!(
+            parse_all(fields[5].as_bytes().unwrap()).unwrap()[0]
+                .as_utf8_lossy()
+                .as_deref(),
+            Some("nested")
+        );
     }
 
     #[test]
@@ -271,13 +276,25 @@ mod tests {
         let mut writer = ProtoWriter::new();
         writer.write_packed_varints(1, [1, 127, 128, -1]).unwrap();
         let fields = parse_all(writer.as_bytes()).unwrap();
-        assert_eq!(decode_packed_varints(fields[0].as_bytes().unwrap()).unwrap(), vec![1, 127, 128, -1]);
+        assert_eq!(
+            decode_packed_varints(fields[0].as_bytes().unwrap()).unwrap(),
+            vec![1, 127, 128, -1]
+        );
     }
 
     #[test]
     fn malformed_payloads_fail_instead_of_reading_past_end() {
-        assert_eq!(parse_all(&[0x0a, 0x05, 0x01]), Err(ProtoError::TruncatedField));
-        assert_eq!(parse_all(&[0x08, 0x80]), Err(ProtoError::TruncatedVarint));
-        assert_eq!(parse_all(&[0x0b]), Err(ProtoError::UnsupportedWireType(3)));
+        assert_eq!(
+            parse_all(&[0x0a, 0x05, 0x01]),
+            Err(ProtoError::TruncatedField)
+        );
+        assert_eq!(
+            parse_all(&[0x08, 0x80]),
+            Err(ProtoError::TruncatedVarint)
+        );
+        assert_eq!(
+            parse_all(&[0x0b]),
+            Err(ProtoError::UnsupportedWireType(3))
+        );
     }
 }
