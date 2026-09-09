@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MANIFEST_PATH="$ROOT_DIR/rust/Cargo.toml"
+JNI_OUTPUT="$ROOT_DIR/app/src/main/jniLibs"
+
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "error: Rust/Cargo is required" >&2
+  exit 1
+fi
+
+if ! cargo ndk --version >/dev/null 2>&1; then
+  echo "error: cargo-ndk is required (cargo install cargo-ndk --locked)" >&2
+  exit 1
+fi
+
+if command -v rustup >/dev/null 2>&1; then
+  rustup target add aarch64-linux-android armv7-linux-androideabi
+fi
+
+rm -rf "$JNI_OUTPUT/arm64-v8a" "$JNI_OUTPUT/armeabi-v7a"
+mkdir -p "$JNI_OUTPUT"
+
+cargo ndk \
+  -t arm64-v8a \
+  -t armeabi-v7a \
+  -o "$JNI_OUTPUT" \
+  build \
+  --release \
+  --manifest-path "$MANIFEST_PATH" \
+  -p monica-steam-android
+
+for abi in arm64-v8a armeabi-v7a; do
+  library="$JNI_OUTPUT/$abi/libmonica_steam_android.so"
+  if [[ ! -s "$library" ]]; then
+    echo "error: expected native library was not produced: $library" >&2
+    exit 1
+  fi
+  echo "Built $library"
+done
