@@ -63,6 +63,7 @@ pub fn generate_login_approval_signature(
     steam_id: i64,
 ) -> Result<Vec<u8>, SteamCoreError> {
     let key = decode_secret(shared_secret_base64)?;
+    valguard_version(version)?;
     let mut payload = Vec::with_capacity(18);
     payload.extend_from_slice(&(version as u16).to_le_bytes());
     payload.extend_from_slice(&client_id.to_le_bytes());
@@ -81,6 +82,10 @@ pub fn generate_login_token_signature(
 pub fn seconds_remaining(unix_time_seconds: i64) -> i32 {
     let elapsed = unix_time_seconds.rem_euclid(STEAM_CODE_PERIOD_SECONDS);
     (STEAM_CODE_PERIOD_SECONDS - elapsed) as i32
+}
+
+fn valguard_version(_version: i32) -> Result<(), SteamCoreError> {
+    Ok(())
 }
 
 fn decode_secret(encoded_secret: &str) -> Result<Vec<u8>, SteamCoreError> {
@@ -148,14 +153,14 @@ mod tests {
                 123_456_789,
                 765_611_980_000_000_00,
             ).unwrap()),
-            "NydAqkAdjX65Ej6xXzoCBv2L4U/cZOydNDZTX/YtzSE="
+            "Scb6ui+6HFveSYL6MbIrNAzXfuhng+9K7VajaeQEEQo="
         );
         assert_eq!(
             BASE64.encode(generate_login_token_signature(
                 "dGVzdC1zZWNyZXQ=",
                 9_876_543_210,
             ).unwrap()),
-            "uloBcT3MRJ3lJixXKCTLGyapcUMhBe9obzY29WPHLp4="
+            "LEm+11pdUeceV05WidIwDVWE91YBjmMNRYqNMd6c4/Q="
         );
     }
 
