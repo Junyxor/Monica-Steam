@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MANIFEST_PATH="$ROOT_DIR/rust/Cargo.toml"
+RUST_DIR="$ROOT_DIR/rust"
 JNI_OUTPUT="$ROOT_DIR/app/src/main/jniLibs"
 
 if ! command -v cargo >/dev/null 2>&1; then
@@ -22,14 +22,17 @@ fi
 rm -rf "$JNI_OUTPUT/arm64-v8a" "$JNI_OUTPUT/armeabi-v7a"
 mkdir -p "$JNI_OUTPUT"
 
-cargo ndk \
-  -t arm64-v8a \
-  -t armeabi-v7a \
-  -o "$JNI_OUTPUT" \
-  build \
-  --release \
-  --manifest-path "$MANIFEST_PATH" \
-  -p monica-steam-android
+(
+  cd "$RUST_DIR"
+  cargo ndk \
+    -p 26 \
+    -t arm64-v8a \
+    -t armeabi-v7a \
+    -o "$JNI_OUTPUT" \
+    build \
+    --release \
+    -p monica-steam-android
+)
 
 for abi in arm64-v8a armeabi-v7a; do
   library="$JNI_OUTPUT/$abi/libmonica_steam_android.so"
