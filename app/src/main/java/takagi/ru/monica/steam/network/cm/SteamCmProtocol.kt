@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.GZIPInputStream
+import takagi.ru.monica.steam.core.RustSteamCoreNative
 import takagi.ru.monica.steam.network.SteamProtoReader
 import takagi.ru.monica.steam.network.SteamProtoWriter
 
@@ -54,6 +55,16 @@ internal object SteamCmProtocol {
         jobIdTarget: Long = JOB_ID_NONE,
         targetJobName: String? = null
     ): ByteArray {
+        RustSteamCoreNative.encodeCmMessageOrNull(
+            eMsg = eMsg,
+            steamId = steamId,
+            sessionId = sessionId,
+            body = body,
+            jobIdSource = jobIdSource,
+            jobIdTarget = jobIdTarget,
+            targetJobName = targetJobName
+        )?.let { return it }
+
         val header = SteamProtoWriter().apply {
             writeFixed64(1, steamId)
             writeVarint(2, sessionId.toLong())
@@ -70,14 +81,17 @@ internal object SteamCmProtocol {
             .array()
     }
 
-    fun webLogonBody(webLogonToken: String): ByteArray = SteamProtoWriter().apply {
-        writeVarint(1, WEB_PROTOCOL_VERSION)
-        writeVarint(7, WEB_CLIENT_OS_TYPE)
-        writeVarint(32, 4L)
-        writeVarint(33, 2L)
-        writeString(80, "anonymous")
-        writeString(103, webLogonToken)
-    }.toByteArray()
+    fun webLogonBody(webLogonToken: String): ByteArray {
+        RustSteamCoreNative.webLogonBodyOrNull(webLogonToken)?.let { return it }
+        return SteamProtoWriter().apply {
+            writeVarint(1, WEB_PROTOCOL_VERSION)
+            writeVarint(7, WEB_CLIENT_OS_TYPE)
+            writeVarint(32, 4L)
+            writeVarint(33, 2L)
+            writeString(80, "anonymous")
+            writeString(103, webLogonToken)
+        }.toByteArray()
+    }
 
     fun decodeMessages(payload: ByteArray): List<SteamCmEnvelope> =
         decodeMessages(payload, depth = 0)
