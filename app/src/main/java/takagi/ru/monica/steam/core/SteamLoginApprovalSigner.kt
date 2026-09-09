@@ -8,13 +8,41 @@ object SteamLoginApprovalSigner {
         version: Int,
         clientId: Long,
         steamId: Long
+    ): ByteArray = RustSteamCoreNative.generateLoginApprovalSignatureOrNull(
+        sharedSecretBase64 = sharedSecretBase64,
+        version = version,
+        clientId = clientId,
+        steamId = steamId
+    ) ?: kotlinSignature(
+        sharedSecretBase64 = sharedSecretBase64,
+        version = version,
+        clientId = clientId,
+        steamId = steamId
+    )
+
+    fun tokenSignature(
+        sharedSecretBase64: String,
+        tokenId: Long
+    ): ByteArray = RustSteamCoreNative.generateLoginTokenSignatureOrNull(
+        sharedSecretBase64 = sharedSecretBase64,
+        tokenId = tokenId
+    ) ?: kotlinTokenSignature(
+        sharedSecretBase64 = sharedSecretBase64,
+        tokenId = tokenId
+    )
+
+    private fun kotlinSignature(
+        sharedSecretBase64: String,
+        version: Int,
+        clientId: Long,
+        steamId: Long
     ): ByteArray {
         val key = Base64.getDecoder().decode(sharedSecretBase64.trim())
         val payload = littleEndian16(version) + littleEndian64(clientId) + littleEndian64(steamId)
         return SteamTotp.hmac("HmacSHA256", key, payload)
     }
 
-    fun tokenSignature(
+    private fun kotlinTokenSignature(
         sharedSecretBase64: String,
         tokenId: Long
     ): ByteArray {
@@ -29,7 +57,7 @@ object SteamLoginApprovalSigner {
 
     private fun littleEndian64(value: Long): ByteArray {
         var current = value
-        return ByteArray(8) { index ->
+        return ByteArray(8) {
             val byte = (current and 0xffL).toByte()
             current = current shr 8
             byte
