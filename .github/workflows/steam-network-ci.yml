@@ -50,7 +50,7 @@ jobs:
       - name: Install Android NDK
         shell: bash
         run: |
-          yes | sdkmanager "ndk;$ANDROID_NDK_VERSION" >/dev/null
+          sdkmanager "ndk;$ANDROID_NDK_VERSION" >/dev/null
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
 
       - name: Install cargo-ndk
