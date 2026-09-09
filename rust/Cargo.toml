@@ -1,0 +1,3 @@
+[workspace]
+members = ["monica-steam-core"]
+resolver = "2"
