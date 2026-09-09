@@ -164,7 +164,23 @@ internal class LiquidGlassDockMotionState internal constructor(
         }
     }
 
-    private fun release(onSettled: (() -> Unit)? = null) {
+    /**
+     * Tap feedback should be brief. Keeping pressProgress at 1 until the pill has
+     * completely travelled forces the expensive lens, chromatic-aberration and
+     * inner-shadow layers to redraw while the destination page is cold-composed.
+     */
+    private fun releasePressVisuals() {
+        releaseJob?.cancel()
+        releaseJob = scope.launch {
+            awaitFrame()
+            launch { pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec) }
+            launch { scaleXAnimation.animateTo(1f, scaleXAnimationSpec) }
+            launch { scaleYAnimation.animateTo(1f, scaleYAnimationSpec) }
+        }
+    }
+
+    /** Drag release keeps the deformation alive until the pill is nearly settled. */
+    private fun releaseAfterSettled(onSettled: (() -> Unit)? = null) {
         releaseJob?.cancel()
         releaseJob = scope.launch {
             awaitFrame()
@@ -205,7 +221,11 @@ internal class LiquidGlassDockMotionState internal constructor(
                     velocityJob?.cancel()
                     velocityJob = launch { velocityAnimation.animateTo(0f, velocityAnimationSpec) }
                 }
-                release(onSettled)
+                if (onSettled == null) {
+                    releasePressVisuals()
+                } else {
+                    releaseAfterSettled(onSettled)
+                }
             }
         }
     }
@@ -257,7 +277,7 @@ internal class LiquidGlassDockMotionState internal constructor(
         if (pressed) {
             press()
         } else if (!isDragging) {
-            release()
+            releasePressVisuals()
         }
     }
 
