@@ -7,12 +7,10 @@
 package takagi.ru.monica.steam.navigation.liquidglass.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.EaseOut
@@ -153,7 +151,6 @@ internal fun SteamLiquidGlassDockVisibility(
 ) {
     val reduceAnimations = LocalReduceAnimations.current
     val enterEasing = remember { CubicBezierEasing(0.22f, 1f, 0.36f, 1f) }
-    val exitEasing = remember { CubicBezierEasing(0.32f, 0f, 0.67f, 0f) }
     AnimatedVisibility(
         visible = visible,
         modifier = modifier,
@@ -176,19 +173,11 @@ internal fun SteamLiquidGlassDockVisibility(
                     transformOrigin = TransformOrigin(0.5f, 1f)
                 )
         },
-        exit = if (reduceAnimations) fadeOut(
-            animationSpec = tween(durationMillis = REDUCED_MOTION_FADE_OUT_DURATION_MILLIS)
-        ) else {
-            slideOutVertically(
-                animationSpec = tween(durationMillis = 160, easing = exitEasing),
-                targetOffsetY = { it }
-            ) + fadeOut(tween(durationMillis = 160, easing = exitEasing)) +
-                scaleOut(
-                    animationSpec = tween(durationMillis = 160, easing = exitEasing),
-                    targetScale = 0.92f,
-                    transformOrigin = TransformOrigin(0.5f, 1f)
-                )
-        }
+        // The liquid-glass dock owns several backdrop/lens layers. Keeping those
+        // layers alive for an exit animation overlaps with the next dock style and
+        // creates a short GPU/composition spike. Entry motion is retained, while
+        // exits release the expensive tree immediately.
+        exit = ExitTransition.None
     ) {
         content()
     }
