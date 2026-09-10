@@ -44,7 +44,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -232,8 +231,8 @@ internal fun SteamLiquidGlassDock(
         val density = LocalDensity.current
         val itemWidthPx = with(density) { itemWidth.toPx() }.coerceAtLeast(1f)
         val dockWidthPx = with(density) { dockWidth.toPx() }.coerceAtLeast(1f)
-        val panelOffsetPx by remember(motionState, dockWidthPx, density) {
-            derivedStateOf {
+        val panelOffsetPx = remember(motionState, dockWidthPx, density) {
+            {
                 val fraction = (motionState.dragOffset / dockWidthPx).coerceIn(-1f, 1f)
                 with(density) {
                     4.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction))
@@ -241,12 +240,6 @@ internal fun SteamLiquidGlassDock(
             }
         }
 
-        val indicatorPosition by remember(motionState, tabs.size) {
-            derivedStateOf {
-                motionState.value.coerceIn(0f, (tabs.size - 1).toFloat())
-            }
-        }
-        val indicatorTranslationPx = itemWidthPx * indicatorPosition
         val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
         val runtimeSupported = remember(runtimeEffectsEnabled) {
             runtimeEffectsEnabled && isSteamLiquidGlassRuntimeSupported()
@@ -264,24 +257,19 @@ internal fun SteamLiquidGlassDock(
             backdrop.delegate,
             tabsBackdrop
         )
-        val shellHighlight = rememberGravityRotatedHighlight(
+        val shellHighlight = rememberGravityRotatedHighlightProvider(
             base = SteamLiquidGlassIndicatorHighlight,
             extraDegrees = -45f
         )
-        val pillHighlight = rememberGravityRotatedHighlight(
+        val pillHighlight = rememberGravityRotatedHighlightProvider(
             base = SteamLiquidGlassIndicatorHighlight,
             extraDegrees = 90f
         )
-        val dragScaleProgress = rememberIndicatorDragScaleProgress(
+        val dragScaleProgress = rememberIndicatorDragScaleProgressProvider(
             isDragging = motionState.isDragging,
             reduceAnimations = reduceAnimations
         )
-        val indicatorScaleProgress = maxOf(dragScaleProgress, motionState.pressProgress)
-        val indicatorTransform = resolveIndicatorTransform(
-            scaleProgress = indicatorScaleProgress,
-            velocityItemsPerSecond = motionState.deformationVelocityItemsPerSecond
-        )
-        val sampledItemScale = lerp(1f, 1.2f, motionState.pressProgress)
+
         Box(
             modifier = Modifier
                 .padding(bottom = 12.dp)
@@ -292,7 +280,7 @@ internal fun SteamLiquidGlassDock(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { translationX = panelOffsetPx }
+                    .graphicsLayer { translationX = panelOffsetPx() }
                     .dropShadow(
                         shape = shellShape,
                         shadow = Shadow(
@@ -314,7 +302,7 @@ internal fun SteamLiquidGlassDock(
                                         refractionAmount = 24.dp.toPx()
                                     )
                                 },
-                                highlight = { shellHighlight.copy(alpha = 0.75f) },
+                                highlight = { shellHighlight().copy(alpha = 0.75f) },
                                 layerBlock = {
                                     val width = size.width.coerceAtLeast(1f)
                                     val scale = lerp(
@@ -336,17 +324,21 @@ internal fun SteamLiquidGlassDock(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 tabs.forEachIndexed { index, tab ->
-                    val coverage = (1f - abs(index.toFloat() - indicatorPosition)).coerceIn(0f, 1f)
+                    val selectedAlpha = {
+                        val position = motionState.value.coerceIn(0f, (tabs.size - 1).toFloat())
+                        (1f - abs(index.toFloat() - position)).coerceIn(0f, 1f)
+                    }
                     SteamLiquidGlassDockItemVisual(
                         tab = tab,
                         itemWidth = itemWidth,
-                        selectedAlpha = coverage,
-                        contentColor = if (runtimeSupported) {
-                            unselectedColor
+                        selectedAlpha = selectedAlpha,
+                        contentColor = if (runtimeSupported) unselectedColor else Color.White,
+                        dynamicTint = if (runtimeSupported) {
+                            null
                         } else {
-                            lerpColor(unselectedColor, selectedColor, coverage)
+                            { lerpColor(unselectedColor, selectedColor, selectedAlpha()) }
                         },
-                        scale = 1f
+                        scale = { 1f }
                     )
                 }
             }
@@ -360,7 +352,7 @@ internal fun SteamLiquidGlassDock(
                         .clearAndSetSemantics {}
                         .liquidGlassCaptureLayer()
                         .layerBackdrop(tabsBackdrop)
-                        .graphicsLayer { translationX = panelOffsetPx }
+                        .graphicsLayer { translationX = panelOffsetPx() }
                         .drawBackdrop(
                             backdrop = backdrop.delegate,
                             shape = { shellShape },
@@ -386,9 +378,9 @@ internal fun SteamLiquidGlassDock(
                             SteamLiquidGlassDockItemVisual(
                                 tab = tab,
                                 itemWidth = itemWidth,
-                                selectedAlpha = 1f,
+                                selectedAlpha = { 1f },
                                 contentColor = Color.White,
-                                scale = sampledItemScale
+                                scale = { lerp(1f, 1.2f, motionState.pressProgress) }
                             )
                         }
                     }
@@ -400,7 +392,17 @@ internal fun SteamLiquidGlassDock(
                     modifier = Modifier
                         .padding(horizontal = 4.dp)
                         .graphicsLayer {
-                            translationX = indicatorTranslationPx + panelOffsetPx
+                            val indicatorPosition = motionState.value
+                                .coerceIn(0f, (tabs.size - 1).toFloat())
+                            val scaleProgress = maxOf(
+                                dragScaleProgress(),
+                                motionState.pressProgress
+                            )
+                            val indicatorTransform = resolveIndicatorTransform(
+                                scaleProgress = scaleProgress,
+                                velocityItemsPerSecond = motionState.deformationVelocityItemsPerSecond
+                            )
+                            translationX = itemWidthPx * indicatorPosition + panelOffsetPx()
                             scaleX = indicatorTransform.scaleX
                             scaleY = indicatorTransform.scaleY
                         }
@@ -420,7 +422,7 @@ internal fun SteamLiquidGlassDock(
                                             )
                                         },
                                         highlight = {
-                                            pillHighlight.copy(alpha = motionState.pressProgress)
+                                            pillHighlight().copy(alpha = motionState.pressProgress)
                                         },
                                         onDrawSurface = {
                                             val progress = motionState.pressProgress
@@ -461,7 +463,7 @@ internal fun SteamLiquidGlassDock(
                     .fillMaxSize()
                     .padding(4.dp)
                     .alpha(0f)
-                    .graphicsLayer { translationX = panelOffsetPx }
+                    .graphicsLayer { translationX = panelOffsetPx() }
                     .liquidGlassDockHorizontalDrag(
                         motionState = motionState,
                         itemWidthPx = itemWidthPx
@@ -498,9 +500,10 @@ internal fun SteamLiquidGlassDock(
 private fun RowScope.SteamLiquidGlassDockItemVisual(
     tab: SteamDockTab,
     itemWidth: Dp,
-    selectedAlpha: Float,
+    selectedAlpha: () -> Float,
     contentColor: Color,
-    scale: Float
+    dynamicTint: (() -> Color)? = null,
+    scale: () -> Float
 ) {
     val label = tab.liquidGlassLabel()
     Column(
@@ -508,8 +511,10 @@ private fun RowScope.SteamLiquidGlassDockItemVisual(
             .width(itemWidth)
             .fillMaxHeight()
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                val resolvedScale = scale()
+                scaleX = resolvedScale
+                scaleY = resolvedScale
+                dynamicTint?.let { tint -> colorFilter = ColorFilter.tint(tint()) }
             },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
@@ -521,7 +526,9 @@ private fun RowScope.SteamLiquidGlassDockItemVisual(
                 tint = contentColor,
                 modifier = Modifier
                     .size(24.dp)
-                    .alpha(1f - selectedAlpha.coerceIn(0f, 1f))
+                    .graphicsLayer {
+                        alpha = 1f - selectedAlpha().coerceIn(0f, 1f)
+                    }
             )
             Icon(
                 imageVector = tab.liquidGlassIcon(selected = true),
@@ -529,7 +536,9 @@ private fun RowScope.SteamLiquidGlassDockItemVisual(
                 tint = contentColor,
                 modifier = Modifier
                     .size(24.dp)
-                    .alpha(selectedAlpha.coerceIn(0f, 1f))
+                    .graphicsLayer {
+                        alpha = selectedAlpha().coerceIn(0f, 1f)
+                    }
             )
         }
         Text(
@@ -604,10 +613,10 @@ private fun resolveIndicatorTransform(
 }
 
 @Composable
-private fun rememberIndicatorDragScaleProgress(
+private fun rememberIndicatorDragScaleProgressProvider(
     isDragging: Boolean,
     reduceAnimations: Boolean
-): Float {
+): () -> Float {
     val progress = remember { Animatable(0f) }
     LaunchedEffect(isDragging, reduceAnimations) {
         progress.animateTo(
@@ -624,41 +633,45 @@ private fun rememberIndicatorDragScaleProgress(
             )
         )
     }
-    return progress.value
+    return remember(progress) { { progress.value } }
 }
 
 @Composable
-private fun rememberGravityRotatedHighlight(
+private fun rememberGravityRotatedHighlightProvider(
     base: Highlight,
     extraDegrees: Float
-): Highlight {
-    val tilt by rememberDeviceTilt()
-    val baseStyle = base.style as BloomStroke
-    val rotatedPrimary = remember(tilt, baseStyle.primaryLight, extraDegrees) {
-        val gravityX = tilt.gravityX
-        val gravityY = tilt.gravityY
-        val magnitudeSquared = gravityX * gravityX + gravityY * gravityY
-        val (lightX, lightY) = if (magnitudeSquared > GRAVITY_DIRECTION_THRESHOLD_SQUARED) {
-            val inverseMagnitude = 1f / sqrt(magnitudeSquared)
-            gravityX * inverseMagnitude to gravityY * inverseMagnitude
-        } else {
-            0f to -1f
-        }
+): () -> Highlight {
+    val tiltState = rememberDeviceTilt()
+    val baseStyle = remember(base) { base.style as BloomStroke }
+    val rotation = remember(extraDegrees) {
         val radians = extraDegrees * PI / 180.0
-        val cosine = cos(radians).toFloat()
-        val sine = sin(radians).toFloat()
-        val rotatedX = cosine * lightX - sine * lightY
-        val rotatedY = sine * lightX + cosine * lightY
-        baseStyle.primaryLight.copy(
-            position = LightPosition(
-                x = LIGHT_REFERENCE_X + rotatedX,
-                y = LIGHT_REFERENCE_Y + rotatedY,
-                z = baseStyle.primaryLight.position.z
-            )
-        )
+        cos(radians).toFloat() to sin(radians).toFloat()
     }
-    return remember(base, rotatedPrimary) {
-        base.copy(style = baseStyle.copy(primaryLight = rotatedPrimary))
+    return remember(base, baseStyle, tiltState, rotation) {
+        {
+            val tilt = tiltState.value
+            val gravityX = tilt.gravityX
+            val gravityY = tilt.gravityY
+            val magnitudeSquared = gravityX * gravityX + gravityY * gravityY
+            val (lightX, lightY) = if (magnitudeSquared > GRAVITY_DIRECTION_THRESHOLD_SQUARED) {
+                val inverseMagnitude = 1f / sqrt(magnitudeSquared)
+                gravityX * inverseMagnitude to gravityY * inverseMagnitude
+            } else {
+                0f to -1f
+            }
+            val cosine = rotation.first
+            val sine = rotation.second
+            val rotatedX = cosine * lightX - sine * lightY
+            val rotatedY = sine * lightX + cosine * lightY
+            val rotatedPrimary = baseStyle.primaryLight.copy(
+                position = LightPosition(
+                    x = LIGHT_REFERENCE_X + rotatedX,
+                    y = LIGHT_REFERENCE_Y + rotatedY,
+                    z = baseStyle.primaryLight.position.z
+                )
+            )
+            base.copy(style = baseStyle.copy(primaryLight = rotatedPrimary))
+        }
     }
 }
 
