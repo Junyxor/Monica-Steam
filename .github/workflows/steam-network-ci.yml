@@ -159,10 +159,12 @@ jobs:
         run: >-
           ./gradlew testDebugUnitTest --stacktrace
           --tests 'takagi.ru.monica.steam.network.SteamProtoTest'
+          --tests 'takagi.ru.monica.steam.network.RustAuthSessionParserTest'
           --tests 'takagi.ru.monica.steam.network.cm.SteamCmProtocolTest'
           --tests 'takagi.ru.monica.steam.network.cm.SteamCmPersistentConnectionTest'
           --tests 'takagi.ru.monica.steam.friends.chat.data.SteamFriendChatServiceTest'
           --tests 'takagi.ru.monica.steam.friends.chat.data.SteamFriendChatRealtimeParserTest'
+          --tests 'takagi.ru.monica.steam.friends.nickname.data.RustFriendNicknameParserTest'
           --tests 'takagi.ru.monica.steam.friends.groupchat.data.RustGroupChatHistoryParserTest'
           --tests 'takagi.ru.monica.steam.friends.groupchat.data.RustGroupChatSummariesParserTest'
           --tests 'takagi.ru.monica.steam.friends.groupchat.data.SteamGroupChatParserTest'
