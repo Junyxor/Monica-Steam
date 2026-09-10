@@ -1,5 +1,6 @@
 mod family_bridge;
 mod group_chat_bridge;
+mod trade_bridge;
 
 use jni::{
     objects::{JByteArray, JClass, JString},
