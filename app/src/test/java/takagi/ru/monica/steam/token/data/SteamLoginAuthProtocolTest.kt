@@ -73,7 +73,7 @@ class SteamLoginAuthProtocolTest {
         )
         val requestFields = SteamProtoReader(request).parse()
         assertEquals(-1L, requestFields[1]?.asLong)
-        assertTrue(requestFields[2]?.bytes.contentEquals("request".toByteArray()))
+        assertTrue(requestFields[2]?.bytes?.contentEquals("request".toByteArray()) == true)
         assertEquals("18446744073709551614", requestFields[3]?.asFixed64UnsignedString)
 
         val response = SteamProtoWriter().apply {
