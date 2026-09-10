@@ -1,4 +1,4 @@
-use crate::proto::{parse_all, ProtoError, ProtoField, ProtoValue};
+use crate::proto::{parse_all_ref, ProtoError, ProtoFieldRef, ProtoValueRef};
 use std::collections::HashSet;
 
 const STEAM_ID64_INDIVIDUAL_BASE: i64 = 76_561_197_960_265_728;
@@ -56,7 +56,8 @@ impl From<ProtoError> for ChatParseError {
 
 pub fn parse_chat_sessions(response: &[u8]) -> Result<Vec<ChatSession>, ChatParseError> {
     ensure_payload_size(response)?;
-    let fields = parse_all(response)?;
+    valueless_guard(response)?;
+    let fields = parse_all_ref(response)?;
     let mut sessions = Vec::new();
     let mut seen = HashSet::new();
 
@@ -64,7 +65,7 @@ pub fn parse_chat_sessions(response: &[u8]) -> Result<Vec<ChatSession>, ChatPars
         let Some(bytes) = field.as_bytes() else {
             continue;
         };
-        let Ok(session_fields) = parse_all(bytes) else {
+        let Ok(session_fields) = parse_all_ref(bytes) else {
             continue;
         };
         let Some(account_id) = last_varint_i64(&session_fields, 1).filter(|value| *value > 0) else {
@@ -87,8 +88,6 @@ pub fn parse_chat_sessions(response: &[u8]) -> Result<Vec<ChatSession>, ChatPars
         });
     }
 
-    // Kotlin's sortedByDescending is stable. slice::sort_by is stable too, so
-    // duplicate timestamps retain their original server order.
     sessions.sort_by(|left, right| {
         right
             .last_message_timestamp
@@ -99,7 +98,7 @@ pub fn parse_chat_sessions(response: &[u8]) -> Result<Vec<ChatSession>, ChatPars
 
 pub fn parse_chat_messages(response: &[u8]) -> Result<ChatPage, ChatParseError> {
     ensure_payload_size(response)?;
-    let fields = parse_all(response)?;
+    let fields = parse_all_ref(response)?;
     let more_available = first_varint_i64(&fields, 4).unwrap_or(0) != 0;
     let mut messages = Vec::new();
     let mut seen = HashSet::new();
@@ -108,7 +107,7 @@ pub fn parse_chat_messages(response: &[u8]) -> Result<ChatPage, ChatParseError> 
         let Some(bytes) = field.as_bytes() else {
             continue;
         };
-        let Ok(message_fields) = parse_all(bytes) else {
+        let Ok(message_fields) = parse_all_ref(bytes) else {
             continue;
         };
         let Some(account_id) = first_varint_i64(&message_fields, 1).filter(|value| *value > 0) else {
@@ -155,13 +154,13 @@ pub fn parse_chat_messages(response: &[u8]) -> Result<ChatPage, ChatParseError> 
     })
 }
 
-fn parse_reactions(message_fields: &[ProtoField]) -> Vec<ChatReaction> {
+fn parse_reactions(message_fields: &[ProtoFieldRef<'_>]) -> Vec<ChatReaction> {
     let mut reactions = Vec::new();
     for field in message_fields.iter().filter(|field| field.number == 5) {
         let Some(bytes) = field.as_bytes() else {
             continue;
         };
-        let Ok(fields) = parse_all(bytes) else {
+        let Ok(fields) = parse_all_ref(bytes) else {
             continue;
         };
         let kind = match first_varint_i64(&fields, 1) {
@@ -208,25 +207,29 @@ fn ensure_payload_size(response: &[u8]) -> Result<(), ChatParseError> {
     }
 }
 
+fn valueless_guard(_response: &[u8]) -> Result<(), ChatParseError> {
+    Ok(())
+}
+
 fn steam_id64_from_account_id(account_id: i64) -> i64 {
     STEAM_ID64_INDIVIDUAL_BASE + (account_id & 0xffff_ffff)
 }
 
-fn proto_varint_i64(field: &ProtoField) -> Option<i64> {
-    match &field.value {
-        ProtoValue::Varint(value) => Some(*value as i64),
+fn proto_varint_i64(field: &ProtoFieldRef<'_>) -> Option<i64> {
+    match field.value {
+        ProtoValueRef::Varint(value) => Some(value as i64),
         _ => None,
     }
 }
 
-fn first_varint_i64(fields: &[ProtoField], number: u32) -> Option<i64> {
+fn first_varint_i64(fields: &[ProtoFieldRef<'_>], number: u32) -> Option<i64> {
     fields
         .iter()
         .find(|field| field.number == number)
         .and_then(proto_varint_i64)
 }
 
-fn last_varint_i64(fields: &[ProtoField], number: u32) -> Option<i64> {
+fn last_varint_i64(fields: &[ProtoFieldRef<'_>], number: u32) -> Option<i64> {
     fields
         .iter()
         .rev()
@@ -234,11 +237,11 @@ fn last_varint_i64(fields: &[ProtoField], number: u32) -> Option<i64> {
         .and_then(proto_varint_i64)
 }
 
-fn first_bytes(fields: &[ProtoField], number: u32) -> Option<&[u8]> {
+fn first_bytes<'a>(fields: &[ProtoFieldRef<'a>], number: u32) -> Option<&'a [u8]> {
     fields
         .iter()
         .find(|field| field.number == number)
-        .and_then(ProtoField::as_bytes)
+        .and_then(ProtoFieldRef::as_bytes)
 }
 
 #[cfg(test)]
