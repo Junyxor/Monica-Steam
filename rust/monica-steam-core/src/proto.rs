@@ -55,6 +55,57 @@ impl ProtoField {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProtoValueRef<'a> {
+    Varint(u64),
+    Fixed64(u64),
+    Bytes(&'a [u8]),
+    Fixed32(u32),
+}
+
+impl<'a> ProtoValueRef<'a> {
+    fn into_owned(self) -> ProtoValue {
+        match self {
+            Self::Varint(value) => ProtoValue::Varint(value),
+            Self::Fixed64(value) => ProtoValue::Fixed64(value),
+            Self::Bytes(bytes) => ProtoValue::Bytes(bytes.to_vec()),
+            Self::Fixed32(value) => ProtoValue::Fixed32(value),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProtoFieldRef<'a> {
+    pub number: u32,
+    pub value: ProtoValueRef<'a>,
+}
+
+impl<'a> ProtoFieldRef<'a> {
+    pub fn wire_type(&self) -> u8 {
+        match self.value {
+            ProtoValueRef::Varint(_) => 0,
+            ProtoValueRef::Fixed64(_) => 1,
+            ProtoValueRef::Bytes(_) => 2,
+            ProtoValueRef::Fixed32(_) => 5,
+        }
+    }
+
+    pub fn as_i64(&self) -> Option<i64> {
+        match self.value {
+            ProtoValueRef::Varint(value) | ProtoValueRef::Fixed64(value) => Some(value as i64),
+            ProtoValueRef::Fixed32(value) => Some(value as i64),
+            ProtoValueRef::Bytes(_) => None,
+        }
+    }
+
+    pub fn as_bytes(&self) -> Option<&'a [u8]> {
+        match self.value {
+            ProtoValueRef::Bytes(bytes) => Some(bytes),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct ProtoWriter {
     out: Vec<u8>,
@@ -137,6 +188,16 @@ impl ProtoWriter {
 }
 
 pub fn parse_all(data: &[u8]) -> Result<Vec<ProtoField>, ProtoError> {
+    Ok(parse_all_ref(data)?
+        .into_iter()
+        .map(|field| ProtoField {
+            number: field.number,
+            value: field.value.into_owned(),
+        })
+        .collect())
+}
+
+pub fn parse_all_ref(data: &[u8]) -> Result<Vec<ProtoFieldRef<'_>>, ProtoError> {
     let mut reader = ProtoReader::new(data);
     let mut fields = Vec::new();
     while !reader.is_finished() {
@@ -147,17 +208,17 @@ pub fn parse_all(data: &[u8]) -> Result<Vec<ProtoField>, ProtoError> {
         }
         let wire_type = (key & 0x07) as u8;
         let value = match wire_type {
-            0 => ProtoValue::Varint(reader.read_varint_raw()?),
-            1 => ProtoValue::Fixed64(u64::from_le_bytes(reader.read_array::<8>()?)),
+            0 => ProtoValueRef::Varint(reader.read_varint_raw()?),
+            1 => ProtoValueRef::Fixed64(u64::from_le_bytes(reader.read_array::<8>()?)),
             2 => {
                 let length = reader.read_varint_raw()?;
                 let length = usize::try_from(length).map_err(|_| ProtoError::LengthOverflow)?;
-                ProtoValue::Bytes(reader.read_bytes(length)?.to_vec())
+                ProtoValueRef::Bytes(reader.read_bytes(length)?)
             }
-            5 => ProtoValue::Fixed32(u32::from_le_bytes(reader.read_array::<4>()?)),
+            5 => ProtoValueRef::Fixed32(u32::from_le_bytes(reader.read_array::<4>()?)),
             other => return Err(ProtoError::UnsupportedWireType(other)),
         };
-        fields.push(ProtoField { number, value });
+        fields.push(ProtoFieldRef { number, value });
     }
     Ok(fields)
 }
@@ -259,6 +320,40 @@ mod tests {
                 .as_deref(),
             Some("nested")
         );
+    }
+
+    #[test]
+    fn borrowed_parser_points_into_the_original_buffer() {
+        let mut writer = ProtoWriter::new();
+        writer.write_string(1, "borrowed").unwrap();
+        let bytes = writer.into_bytes();
+        let fields = parse_all_ref(&bytes).unwrap();
+        let borrowed = fields[0].as_bytes().unwrap();
+        assert_eq!(borrowed, b"borrowed");
+        let start = bytes.as_ptr() as usize;
+        let end = start + bytes.len();
+        let borrowed_ptr = borrowed.as_ptr() as usize;
+        assert!(borrowed_ptr >= start && borrowed_ptr < end);
+    }
+
+    #[test]
+    fn owned_and_borrowed_parsers_have_identical_wire_semantics() {
+        let mut writer = ProtoWriter::new();
+        writer.write_varint(1, -1).unwrap();
+        writer.write_fixed64(2, -2).unwrap();
+        writer.write_bytes(3, b"bytes").unwrap();
+        writer.write_fixed32(4, u32::MAX).unwrap();
+        let bytes = writer.into_bytes();
+
+        let owned = parse_all(&bytes).unwrap();
+        let borrowed = parse_all_ref(&bytes).unwrap();
+        assert_eq!(owned.len(), borrowed.len());
+        for (owned, borrowed) in owned.iter().zip(&borrowed) {
+            assert_eq!(owned.number, borrowed.number);
+            assert_eq!(owned.wire_type(), borrowed.wire_type());
+            assert_eq!(owned.as_i64(), borrowed.as_i64());
+            assert_eq!(owned.as_bytes(), borrowed.as_bytes());
+        }
     }
 
     #[test]
