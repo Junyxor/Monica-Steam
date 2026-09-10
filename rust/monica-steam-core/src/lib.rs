@@ -1,4 +1,5 @@
 pub mod achievement;
+pub mod auth_session;
 pub mod chat;
 pub mod cm;
 pub mod family;
