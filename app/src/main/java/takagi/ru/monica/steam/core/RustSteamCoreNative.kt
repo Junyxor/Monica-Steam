@@ -192,6 +192,25 @@ internal object RustSteamCoreNative {
             ?.takeIf { it.isNotEmpty() }
     }
 
+    fun parseMaFileJsonOrNull(
+        plainJson: String,
+        fileName: String?,
+        displayNameOverride: String?,
+        steamIdOverride: String?,
+        allowMissingSteamId: Boolean
+    ): ByteArray? {
+        if (!loaded || plainJson.isEmpty()) return null
+        return runCatching {
+            nativeParseMaFileJson(
+                plainJson = plainJson,
+                fileName = fileName.orEmpty(),
+                displayNameOverride = displayNameOverride.orEmpty(),
+                steamIdOverride = steamIdOverride.orEmpty(),
+                allowMissingSteamId = allowMissingSteamId
+            )
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
     fun parseGroupChatHistoryOrNull(response: ByteArray): ByteArray? {
         if (!loaded || response.isEmpty()) return null
         return runCatching { nativeParseGroupChatHistory(response) }
@@ -243,6 +262,7 @@ internal object RustSteamCoreNative {
     @JvmStatic private external fun nativeParseAuthorizedDevices(response: ByteArray): ByteArray
     @JvmStatic private external fun nativeParseTradeOffers(response: ByteArray): ByteArray
     @JvmStatic private external fun nativeParseWishlist(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeParseMaFileJson(plainJson: String, fileName: String, displayNameOverride: String, steamIdOverride: String, allowMissingSteamId: Boolean): ByteArray
     @JvmStatic private external fun nativeParseGroupChatHistory(response: ByteArray): ByteArray
     @JvmStatic private external fun nativeParseGroupChatSummaries(response: ByteArray): ByteArray
     @JvmStatic private external fun nativeWebLogonBody(webLogonToken: String): ByteArray
