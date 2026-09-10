@@ -1,0 +1,40 @@
+name: Apply Login Protocol Refactor
+
+on:
+  push:
+    branches:
+      - refactor/rust-core-dock-performance
+    paths:
+      - tools/apply_login_protocol_refactor.py
+      - .github/workflows/apply-login-protocol-refactor.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/rust-core-dock-performance
+          fetch-depth: 0
+
+      - name: Apply exact login protocol migration
+        run: python3 tools/apply_login_protocol_refactor.py
+
+      - name: Remove one-time migration helpers
+        run: |
+          rm tools/apply_login_protocol_refactor.py
+          rm .github/workflows/apply-login-protocol-refactor.yml
+
+      - name: Commit migrated sources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "refactor: route login protocol through Rust core"
+          git push origin HEAD:refactor/rust-core-dock-performance
