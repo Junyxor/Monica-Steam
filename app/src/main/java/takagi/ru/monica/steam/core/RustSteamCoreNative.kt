@@ -150,6 +150,27 @@ internal object RustSteamCoreNative {
             ?.takeIf { it.isNotEmpty() }
     }
 
+    fun parsePendingLoginClientIdsOrNull(response: ByteArray): ByteArray? {
+        if (!loaded || response.isEmpty()) return null
+        return runCatching { nativeParsePendingLoginClientIds(response) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    fun parseAuthSessionInfoOrNull(response: ByteArray): ByteArray? {
+        if (!loaded) return null
+        return runCatching { nativeParseAuthSessionInfo(response) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    fun parseAuthConfirmationOrNull(response: ByteArray): ByteArray? {
+        if (!loaded) return null
+        return runCatching { nativeParseAuthConfirmation(response) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
     fun parseGroupChatHistoryOrNull(response: ByteArray): ByteArray? {
         if (!loaded || response.isEmpty()) return null
         return runCatching { nativeParseGroupChatHistory(response) }
@@ -172,79 +193,33 @@ internal object RustSteamCoreNative {
     }
 
     @JvmStatic
-    private external fun nativeGenerateAuthCode(
-        sharedSecretBase64: String,
-        unixTimeSeconds: Long
-    ): String
+    private external fun nativeGenerateAuthCode(sharedSecretBase64: String, unixTimeSeconds: Long): String
 
     @JvmStatic
-    private external fun nativeGenerateConfirmationHash(
-        identitySecretBase64: String,
-        unixTimeSeconds: Long,
-        tag: String
-    ): String
+    private external fun nativeGenerateConfirmationHash(identitySecretBase64: String, unixTimeSeconds: Long, tag: String): String
 
     @JvmStatic
-    private external fun nativeGenerateLoginApprovalSignature(
-        sharedSecretBase64: String,
-        version: Int,
-        clientId: Long,
-        steamId: Long
-    ): ByteArray
+    private external fun nativeGenerateLoginApprovalSignature(sharedSecretBase64: String, version: Int, clientId: Long, steamId: Long): ByteArray
 
     @JvmStatic
-    private external fun nativeGenerateLoginTokenSignature(
-        sharedSecretBase64: String,
-        tokenId: Long
-    ): ByteArray
+    private external fun nativeGenerateLoginTokenSignature(sharedSecretBase64: String, tokenId: Long): ByteArray
 
     @JvmStatic
-    private external fun nativeEncodeCmMessage(
-        eMsg: Int,
-        steamId: Long,
-        sessionId: Int,
-        body: ByteArray,
-        jobIdSource: Long,
-        jobIdTarget: Long,
-        targetJobName: String
-    ): ByteArray
+    private external fun nativeEncodeCmMessage(eMsg: Int, steamId: Long, sessionId: Int, body: ByteArray, jobIdSource: Long, jobIdTarget: Long, targetJobName: String): ByteArray
 
-    @JvmStatic
-    private external fun nativeDecodeCmMessages(payload: ByteArray): ByteArray
-
-    @JvmStatic
-    private external fun nativeParseChatSessions(response: ByteArray): ByteArray
-
-    @JvmStatic
-    private external fun nativeParseChatMessages(response: ByteArray): ByteArray
-
-    @JvmStatic
-    private external fun nativeParseOwnedGames(response: ByteArray): ByteArray
-
-    @JvmStatic
-    private external fun nativeParseAchievementProgress(response: ByteArray): ByteArray
-
-    @JvmStatic
-    private external fun nativeParseStoreItems(response: ByteArray): ByteArray
-
-    @JvmStatic
-    private external fun nativeParseAchievementDetails(
-        definitionsResponse: ByteArray,
-        userResponse: ByteArray
-    ): ByteArray
-
-    @JvmStatic
-    private external fun nativeParseFamilySharedApps(response: ByteArray): ByteArray
-
-    @JvmStatic
-    private external fun nativeParseFriendNicknames(response: ByteArray): ByteArray
-
-    @JvmStatic
-    private external fun nativeParseGroupChatHistory(response: ByteArray): ByteArray
-
-    @JvmStatic
-    private external fun nativeParseGroupChatSummaries(response: ByteArray): ByteArray
-
-    @JvmStatic
-    private external fun nativeWebLogonBody(webLogonToken: String): ByteArray
+    @JvmStatic private external fun nativeDecodeCmMessages(payload: ByteArray): ByteArray
+    @JvmStatic private external fun nativeParseChatSessions(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeParseChatMessages(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeParseOwnedGames(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeParseAchievementProgress(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeParseStoreItems(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeParseAchievementDetails(definitionsResponse: ByteArray, userResponse: ByteArray): ByteArray
+    @JvmStatic private external fun nativeParseFamilySharedApps(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeParseFriendNicknames(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeParsePendingLoginClientIds(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeParseAuthSessionInfo(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeParseAuthConfirmation(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeParseGroupChatHistory(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeParseGroupChatSummaries(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeWebLogonBody(webLogonToken: String): ByteArray
 }
