@@ -622,6 +622,7 @@ class SteamGameLibraryService internal constructor(
         }
 
         fun parseOwnedGames(response: ByteArray): List<SteamGame> {
+            RustOwnedGamesParser.parseOrNull(response)?.let { return it }
             val fields = SteamProtoReader(response).parseAll()
             val declaredGameCount = fields
                 .firstOrNull { it.number == 1 && it.wireType == 0 }
