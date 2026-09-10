@@ -143,6 +143,13 @@ internal object RustSteamCoreNative {
             ?.takeIf { it.isNotEmpty() }
     }
 
+    fun parseGroupChatHistoryOrNull(response: ByteArray): ByteArray? {
+        if (!loaded || response.isEmpty()) return null
+        return runCatching { nativeParseGroupChatHistory(response) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
     fun webLogonBodyOrNull(webLogonToken: String): ByteArray? {
         if (!loaded) return null
         return runCatching { nativeWebLogonBody(webLogonToken) }
@@ -214,6 +221,9 @@ internal object RustSteamCoreNative {
 
     @JvmStatic
     private external fun nativeParseFamilySharedApps(response: ByteArray): ByteArray
+
+    @JvmStatic
+    private external fun nativeParseGroupChatHistory(response: ByteArray): ByteArray
 
     @JvmStatic
     private external fun nativeWebLogonBody(webLogonToken: String): ByteArray

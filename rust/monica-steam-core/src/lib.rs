@@ -2,6 +2,7 @@ pub mod achievement;
 pub mod chat;
 pub mod cm;
 pub mod family;
+pub mod group_chat;
 pub mod library;
 pub mod proto;
 

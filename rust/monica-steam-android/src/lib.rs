@@ -1,4 +1,5 @@
 mod family_bridge;
+mod group_chat_bridge;
 
 use jni::{
     objects::{JByteArray, JClass, JString},

@@ -143,6 +143,8 @@ jobs:
           --tests 'takagi.ru.monica.steam.network.cm.SteamCmPersistentConnectionTest'
           --tests 'takagi.ru.monica.steam.friends.chat.data.SteamFriendChatServiceTest'
           --tests 'takagi.ru.monica.steam.friends.chat.data.SteamFriendChatRealtimeParserTest'
+          --tests 'takagi.ru.monica.steam.friends.groupchat.data.RustGroupChatHistoryParserTest'
+          --tests 'takagi.ru.monica.steam.friends.groupchat.data.SteamGroupChatParserTest'
           --tests 'takagi.ru.monica.steam.library.RustOwnedGamesParserTest'
           --tests 'takagi.ru.monica.steam.library.RustAchievementProgressParserTest'
           --tests 'takagi.ru.monica.steam.library.RustStoreItemsParserTest'
