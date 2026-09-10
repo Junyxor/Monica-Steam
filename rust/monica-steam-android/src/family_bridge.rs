@@ -8,6 +8,9 @@ use monica_steam_core::{
         parse_auth_session_info, parse_mobile_confirmation_success,
         parse_pending_login_client_ids, AuthSessionInfo,
     },
+    authorized_device::{
+        parse_authorized_devices, AuthorizedDevice, AuthorizedDeviceUsage,
+    },
     family::{parse_shared_library_apps, FamilySharedGame},
     friend_nickname::{parse_friend_nicknames, FriendNickname},
 };
@@ -18,6 +21,7 @@ const FRIEND_NICKNAMES_BRIDGE_MAGIC: &[u8; 4] = b"MSN1";
 const AUTH_CLIENT_IDS_BRIDGE_MAGIC: &[u8; 4] = b"MAC1";
 const AUTH_SESSION_INFO_BRIDGE_MAGIC: &[u8; 4] = b"MAI1";
 const AUTH_CONFIRMATION_BRIDGE_MAGIC: &[u8; 4] = b"MAR1";
+const AUTHORIZED_DEVICES_BRIDGE_MAGIC: &[u8; 4] = b"MSD1";
 
 fn write_required_string(out: &mut Vec<u8>, value: &str) -> Option<()> {
     let bytes = value.as_bytes();
@@ -85,6 +89,45 @@ fn serialize_auth_confirmation(success: bool) -> Vec<u8> {
     out.extend_from_slice(AUTH_CONFIRMATION_BRIDGE_MAGIC);
     out.extend_from_slice(&(if success { 1i32 } else { 0i32 }).to_le_bytes());
     out
+}
+
+fn serialize_authorized_devices(devices: &[AuthorizedDevice]) -> Option<Vec<u8>> {
+    let count = u32::try_from(devices.len()).ok()?;
+    let mut out = Vec::new();
+    out.extend_from_slice(AUTHORIZED_DEVICES_BRIDGE_MAGIC);
+    out.extend_from_slice(&count.to_le_bytes());
+    for device in devices {
+        match device.token_id {
+            Some(token_id) => {
+                out.extend_from_slice(&1i32.to_le_bytes());
+                out.extend_from_slice(&token_id.to_le_bytes());
+            }
+            None => {
+                out.extend_from_slice(&0i32.to_le_bytes());
+                out.extend_from_slice(&0u64.to_le_bytes());
+            }
+        }
+        out.extend_from_slice(&device.platform_type.to_le_bytes());
+        out.extend_from_slice(&(if device.logged_in { 1i32 } else { 0i32 }).to_le_bytes());
+        out.extend_from_slice(&(if device.is_current { 1i32 } else { 0i32 }).to_le_bytes());
+        write_required_string(&mut out, &device.description)?;
+        write_optional_usage(&mut out, device.first_seen.as_ref())?;
+        write_optional_usage(&mut out, device.last_seen.as_ref())?;
+    }
+    Some(out)
+}
+
+fn write_optional_usage(out: &mut Vec<u8>, usage: Option<&AuthorizedDeviceUsage>) -> Option<()> {
+    let Some(usage) = usage else {
+        out.extend_from_slice(&0i32.to_le_bytes());
+        return Some(());
+    };
+    out.extend_from_slice(&1i32.to_le_bytes());
+    out.extend_from_slice(&usage.time_seconds.to_le_bytes());
+    write_required_string(out, &usage.country)?;
+    write_required_string(out, &usage.state)?;
+    write_required_string(out, &usage.city)?;
+    Some(())
 }
 
 #[no_mangle]
@@ -185,6 +228,26 @@ pub extern "system" fn Java_takagi_ru_monica_steam_core_RustSteamCoreNative_nati
         .unwrap_or(ptr::null_mut())
 }
 
+#[no_mangle]
+pub extern "system" fn Java_takagi_ru_monica_steam_core_RustSteamCoreNative_nativeParseAuthorizedDevices(
+    env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    response: JByteArray<'_>,
+) -> jbyteArray {
+    let Ok(response) = env.convert_byte_array(&response) else {
+        return ptr::null_mut();
+    };
+    let Ok(devices) = parse_authorized_devices(&response) else {
+        return ptr::null_mut();
+    };
+    let Some(encoded) = serialize_authorized_devices(&devices) else {
+        return ptr::null_mut();
+    };
+    env.byte_array_from_slice(&encoded)
+        .map(|result| result.into_raw())
+        .unwrap_or(ptr::null_mut())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,5 +305,32 @@ mod tests {
         let confirmed = serialize_auth_confirmation(true);
         assert_eq!(&confirmed[0..4], b"MAR1");
         assert_eq!(i32::from_le_bytes(confirmed[4..8].try_into().unwrap()), 1);
+    }
+
+    #[test]
+    fn authorized_devices_bridge_layout_is_stable() {
+        let encoded = serialize_authorized_devices(&[AuthorizedDevice {
+            token_id: Some(u64::MAX - 1),
+            description: "This phone".to_string(),
+            platform_type: 3,
+            logged_in: true,
+            first_seen: Some(AuthorizedDeviceUsage {
+                time_seconds: 10,
+                country: "US".to_string(),
+                state: "CA".to_string(),
+                city: "San Francisco".to_string(),
+            }),
+            last_seen: None,
+            is_current: true,
+        }])
+        .unwrap();
+
+        assert_eq!(&encoded[0..4], b"MSD1");
+        assert_eq!(u32::from_le_bytes(encoded[4..8].try_into().unwrap()), 1);
+        assert_eq!(i32::from_le_bytes(encoded[8..12].try_into().unwrap()), 1);
+        assert_eq!(u64::from_le_bytes(encoded[12..20].try_into().unwrap()), u64::MAX - 1);
+        assert_eq!(i32::from_le_bytes(encoded[20..24].try_into().unwrap()), 3);
+        assert_eq!(i32::from_le_bytes(encoded[24..28].try_into().unwrap()), 1);
+        assert_eq!(i32::from_le_bytes(encoded[28..32].try_into().unwrap()), 1);
     }
 }
