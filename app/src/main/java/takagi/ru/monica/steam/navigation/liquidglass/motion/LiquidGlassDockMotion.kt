@@ -130,6 +130,7 @@ internal class LiquidGlassDockMotionState internal constructor(
     private var releaseJob: Job? = null
     private var offsetJob: Job? = null
     private var desiredValue = initialIndex.toFloat()
+    private var desiredOffset = 0f
 
     val value: Float get() = valueAnimation.value
     val targetValue: Float get() = valueAnimation.targetValue
@@ -197,16 +198,17 @@ internal class LiquidGlassDockMotionState internal constructor(
         }
     }
 
-    private fun updateDeformationVelocity(position: Float) {
+    private suspend fun updateDeformationVelocity(position: Float) {
         val valueRange = (itemCount - 1).toFloat().coerceAtLeast(1f)
         deformationVelocityTracker.addPosition(
             System.currentTimeMillis(),
             Offset(position, 0f)
         )
         val targetVelocity = deformationVelocityTracker.calculateVelocity().x / valueRange
-        velocityJob = scope.launch {
-            velocityAnimation.animateTo(targetVelocity, velocityAnimationSpec)
-        }
+        // During a drag the finger already supplies a fresh value every pointer
+        // event. Springing toward every sample only creates cancellation churn and
+        // visual lag; snap while dragging, then spring back to zero after release.
+        velocityAnimation.snapTo(targetVelocity)
     }
 
     private fun animateToValue(value: Float, onSettled: (() -> Unit)? = null) {
@@ -243,10 +245,10 @@ internal class LiquidGlassDockMotionState internal constructor(
             startNewMotion()
             valueJob?.cancel()
             offsetJob?.cancel()
-            desiredValue = valueAnimation.value
-            velocityPxPerSecond = 0f
             velocityJob?.cancel()
-            velocityJob = scope.launch { velocityAnimation.snapTo(0f) }
+            desiredValue = valueAnimation.value
+            desiredOffset = offsetAnimation.value
+            velocityPxPerSecond = 0f
             press()
         }
         velocityPxPerSecond = gestureVelocityPxPerSecond
@@ -261,17 +263,15 @@ internal class LiquidGlassDockMotionState internal constructor(
             -dragSpec.overscrollLimitItems,
             (itemCount - 1).toFloat() + dragSpec.overscrollLimitItems
         )
+        desiredOffset += dragAmountPx
 
         val clampedValue = desiredValue.fastCoerceIn(0f, (itemCount - 1).toFloat())
+        val nextOffset = desiredOffset
         valueJob?.cancel()
         valueJob = scope.launch {
             valueAnimation.snapTo(clampedValue)
+            offsetAnimation.snapTo(nextOffset)
             updateDeformationVelocity(clampedValue)
-        }
-
-        offsetJob?.cancel()
-        offsetJob = scope.launch {
-            offsetAnimation.snapTo(offsetAnimation.value + dragAmountPx)
         }
     }
 
@@ -297,6 +297,7 @@ internal class LiquidGlassDockMotionState internal constructor(
         )
         targetIndex = releaseTargetIndex
         desiredValue = releaseTargetIndex.toFloat()
+        desiredOffset = 0f
         animateToValue(releaseTargetIndex.toFloat()) {
             if (generation == motionGeneration) {
                 velocityPxPerSecond = 0f
