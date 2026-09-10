@@ -213,8 +213,8 @@ fn steam_id64_from_account_id(account_id: i64) -> i64 {
 }
 
 fn proto_varint_i64(field: &ProtoField) -> Option<i64> {
-    match field.value {
-        ProtoValue::Varint(value) => Some(value as i64),
+    match &field.value {
+        ProtoValue::Varint(value) => Some(*value as i64),
         _ => None,
     }
 }
