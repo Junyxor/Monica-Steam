@@ -283,7 +283,7 @@ internal object SteamLoginAuthProtocol {
             runCatching { Base64.getDecoder().decode(padded) }.getOrNull(),
             runCatching { Base64.getUrlDecoder().decode(padded) }.getOrNull(),
             runCatching { Base64.getMimeDecoder().decode(trimmed) }.getOrNull()
-        ).firstOrNull { !it.isNullOrEmpty() }
+        ).firstOrNull { it?.isNotEmpty() == true }
         if (decoded != null) return decoded
         return decodeHex(trimmed) ?: trimmed.toByteArray(Charsets.UTF_8)
     }
