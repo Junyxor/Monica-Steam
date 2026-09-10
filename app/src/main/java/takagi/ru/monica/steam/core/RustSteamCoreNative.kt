@@ -105,6 +105,13 @@ internal object RustSteamCoreNative {
             ?.takeIf { it.isNotEmpty() }
     }
 
+    fun parseOwnedGamesOrNull(response: ByteArray): ByteArray? {
+        if (!loaded || response.isEmpty()) return null
+        return runCatching { nativeParseOwnedGames(response) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
     fun webLogonBodyOrNull(webLogonToken: String): ByteArray? {
         if (!loaded) return null
         return runCatching { nativeWebLogonBody(webLogonToken) }
@@ -158,6 +165,9 @@ internal object RustSteamCoreNative {
 
     @JvmStatic
     private external fun nativeParseChatMessages(response: ByteArray): ByteArray
+
+    @JvmStatic
+    private external fun nativeParseOwnedGames(response: ByteArray): ByteArray
 
     @JvmStatic
     private external fun nativeWebLogonBody(webLogonToken: String): ByteArray
