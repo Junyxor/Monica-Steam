@@ -185,8 +185,9 @@ fn serialize_store_items(items: &[StoreMetadata]) -> Option<Vec<u8>> {
             Some(false) => 0i32,
             None => -1i32,
         };
-        out.extend_from_slice(&(if has_price { 1i32 } else { 0i32 }).to_le_bytes());
+        out.extend_from_slice(&cloud_state.to_le_bytes());
         let has_price = item.final_price_minor.is_some() && item.original_price_minor.is_some();
+        out.extend_from_slice(&(if has_price { 1i32 } else { 0i32 }).to_le_bytes());
         out.extend_from_slice(&item.final_price_minor.unwrap_or(0).to_le_bytes());
         out.extend_from_slice(&item.original_price_minor.unwrap_or(0).to_le_bytes());
         write_required_string(&mut out, &item.header_image_url)?;
