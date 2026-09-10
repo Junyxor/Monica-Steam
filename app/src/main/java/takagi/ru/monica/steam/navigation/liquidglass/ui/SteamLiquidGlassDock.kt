@@ -261,11 +261,13 @@ internal fun SteamLiquidGlassDock(
         )
         val shellHighlight = rememberGravityRotatedHighlightProvider(
             base = SteamLiquidGlassIndicatorHighlight,
-            extraDegrees = -45f
+            extraDegrees = -45f,
+            enabled = runtimeSupported
         )
         val pillHighlight = rememberGravityRotatedHighlightProvider(
             base = SteamLiquidGlassIndicatorHighlight,
-            extraDegrees = 90f
+            extraDegrees = 90f,
+            enabled = runtimeSupported
         )
         val dragScaleProgress = rememberIndicatorDragScaleProgressProvider(
             isDragging = motionState.isDragging,
@@ -640,8 +642,12 @@ private fun rememberIndicatorDragScaleProgressProvider(
 @Composable
 private fun rememberGravityRotatedHighlightProvider(
     base: Highlight,
-    extraDegrees: Float
+    extraDegrees: Float,
+    enabled: Boolean
 ): () -> Highlight {
+    if (!enabled) {
+        return remember(base) { { base } }
+    }
     val tiltState = rememberDeviceTilt()
     val baseStyle = remember(base) { base.style as BloomStroke }
     val rotation = remember(extraDegrees) {
