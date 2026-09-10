@@ -173,6 +173,8 @@ jobs:
           --tests 'takagi.ru.monica.steam.trade.RustTradeOfferParserTest'
           --tests 'takagi.ru.monica.steam.trade.SteamTradeOfferServiceTest'
           --tests 'takagi.ru.monica.steam.trade.SteamTradeOfferIntegrationGuardTest'
+          --tests 'takagi.ru.monica.steam.store.SteamWishlistProtocolTest'
+          --tests 'takagi.ru.monica.steam.store.data.RustSteamWishlistParserTest'
           --tests 'takagi.ru.monica.steam.library.RustOwnedGamesParserTest'
           --tests 'takagi.ru.monica.steam.library.RustAchievementProgressParserTest'
           --tests 'takagi.ru.monica.steam.library.RustStoreItemsParserTest'
