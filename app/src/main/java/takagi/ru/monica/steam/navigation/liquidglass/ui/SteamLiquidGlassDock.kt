@@ -129,6 +129,13 @@ private val SteamLiquidGlassIndicatorHighlight = Highlight(
         dualPeak = true
     )
 )
+private val SteamLiquidGlassIdleIndicatorHighlight =
+    SteamLiquidGlassIndicatorHighlight.copy(alpha = 0f)
+private val SteamLiquidGlassIdleInnerShadow = LiquidGlassInnerShadow(
+    radius = 0.dp,
+    color = Color.Black.copy(alpha = 0.15f),
+    alpha = 0f
+)
 
 private const val LIGHT_REFERENCE_X = 0.5f
 private const val LIGHT_REFERENCE_Y = 0.7f
@@ -421,15 +428,22 @@ internal fun SteamLiquidGlassDock(
                                         shape = { shellShape },
                                         effects = {
                                             val progress = motionState.pressProgress
-                                            liquidGlassLens(
-                                                refractionHeight = 10.dp.toPx() * progress,
-                                                refractionAmount = 14.dp.toPx() * progress,
-                                                depthEffect = true,
-                                                chromaticAberration = 0.5f
-                                            )
+                                            if (progress != 0f) {
+                                                liquidGlassLens(
+                                                    refractionHeight = 10.dp.toPx() * progress,
+                                                    refractionAmount = 14.dp.toPx() * progress,
+                                                    depthEffect = true,
+                                                    chromaticAberration = 0.5f
+                                                )
+                                            }
                                         },
                                         highlight = {
-                                            pillHighlight().copy(alpha = motionState.pressProgress)
+                                            val progress = motionState.pressProgress
+                                            if (progress == 0f) {
+                                                SteamLiquidGlassIdleIndicatorHighlight
+                                            } else {
+                                                pillHighlight().copy(alpha = progress)
+                                            }
                                         },
                                         onDrawSurface = {
                                             val progress = motionState.pressProgress
@@ -441,15 +455,22 @@ internal fun SteamLiquidGlassDock(
                                                 },
                                                 alpha = 1f - progress
                                             )
-                                            drawRect(Color.Black.copy(alpha = 0.03f * progress))
+                                            if (progress != 0f) {
+                                                drawRect(Color.Black.copy(alpha = 0.03f * progress))
+                                            }
                                         }
                                     )
                                     .liquidGlassInnerShadow(shape = shellShape) {
-                                        LiquidGlassInnerShadow(
-                                            radius = 8.dp * motionState.pressProgress,
-                                            color = Color.Black.copy(alpha = 0.15f),
-                                            alpha = motionState.pressProgress
-                                        )
+                                        val progress = motionState.pressProgress
+                                        if (progress == 0f) {
+                                            SteamLiquidGlassIdleInnerShadow
+                                        } else {
+                                            LiquidGlassInnerShadow(
+                                                radius = 8.dp * progress,
+                                                color = Color.Black.copy(alpha = 0.15f),
+                                                alpha = progress
+                                            )
+                                        }
                                     }
                             } else {
                                 Modifier.background(
