@@ -785,6 +785,7 @@ class SteamGameLibraryService internal constructor(
             definitionsResponse: ByteArray,
             userResponse: ByteArray
         ): SteamGameAchievements {
+            RustAchievementDetailsParser.parseGameAchievementsOrNull(accountId, appId, gameName, definitionsResponse, userResponse)?.let { return it }
             val statuses = SteamProtoReader(userResponse).parseAll()
                 .asSequence()
                 .filter { it.number == 1 && it.bytes != null }

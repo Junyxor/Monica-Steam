@@ -1,3 +1,4 @@
+pub mod achievement;
 pub mod chat;
 pub mod cm;
 pub mod library;

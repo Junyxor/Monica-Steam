@@ -4,6 +4,7 @@ use jni::{
     JNIEnv,
 };
 use monica_steam_core::{
+    achievement::{parse_achievement_details, AchievementDetail},
     chat::{
         parse_chat_messages, parse_chat_sessions, ChatPage, ChatReactionKind, ChatSession,
     },
@@ -23,6 +24,7 @@ const CHAT_MESSAGES_BRIDGE_MAGIC: &[u8; 4] = b"MSM1";
 const OWNED_GAMES_BRIDGE_MAGIC: &[u8; 4] = b"MSL1";
 const ACHIEVEMENT_PROGRESS_BRIDGE_MAGIC: &[u8; 4] = b"MSP1";
 const STORE_ITEMS_BRIDGE_MAGIC: &[u8; 4] = b"MST1";
+const ACHIEVEMENT_DETAILS_BRIDGE_MAGIC: &[u8; 4] = b"MSA1";
 const OPTIONAL_I32_NONE: i32 = i32::MIN;
 
 fn read_jstring(env: &mut JNIEnv<'_>, value: &JString<'_>) -> Option<String> {
@@ -184,6 +186,25 @@ fn serialize_store_items(items: &[StoreMetadata]) -> Option<Vec<u8>> {
         out.extend_from_slice(&item.final_price_minor.unwrap_or(0).to_le_bytes());
         out.extend_from_slice(&item.original_price_minor.unwrap_or(0).to_le_bytes());
         write_required_string(&mut out, &item.header_image_url)?;
+    }
+    Some(out)
+}
+
+fn serialize_achievement_details(items: &[AchievementDetail]) -> Option<Vec<u8>> {
+    let count = u32::try_from(items.len()).ok()?;
+    let mut out = Vec::new();
+    out.extend_from_slice(ACHIEVEMENT_DETAILS_BRIDGE_MAGIC);
+    out.extend_from_slice(&count.to_le_bytes());
+    for item in items {
+        out.extend_from_slice(&(if item.achieved { 1i32 } else { 0i32 }).to_le_bytes());
+        let has_unlock_time = item.unlock_time_seconds.is_some();
+        out.extend_from_slice(&(if has_unlock_time { 1i32 } else { 0i32 }).to_le_bytes());
+        out.extend_from_slice(&item.unlock_time_seconds.unwrap_or(0).to_le_bytes());
+        write_required_string(&mut out, &item.api_name)?;
+        write_required_string(&mut out, &item.display_name)?;
+        write_required_string(&mut out, &item.description)?;
+        write_optional_string(&mut out, item.icon_url.as_deref())?;
+        write_optional_string(&mut out, item.locked_icon_url.as_deref())?;
     }
     Some(out)
 }
@@ -406,6 +427,28 @@ pub extern "system" fn Java_takagi_ru_monica_steam_core_RustSteamCoreNative_nati
 }
 
 #[no_mangle]
+pub extern "system" fn Java_takagi_ru_monica_steam_core_RustSteamCoreNative_nativeParseAchievementDetails(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    definitions_response: JByteArray<'_>,
+    user_response: JByteArray<'_>,
+) -> jbyteArray {
+    let Ok(definitions_response) = env.convert_byte_array(&definitions_response) else {
+        return ptr::null_mut();
+    };
+    let Ok(user_response) = env.convert_byte_array(&user_response) else {
+        return ptr::null_mut();
+    };
+    let Ok(items) = parse_achievement_details(&definitions_response, &user_response) else {
+        return ptr::null_mut();
+    };
+    let Some(encoded) = serialize_achievement_details(&items) else {
+        return ptr::null_mut();
+    };
+    write_jbytes(&mut env, &encoded)
+}
+
+#[no_mangle]
 pub extern "system" fn Java_takagi_ru_monica_steam_core_RustSteamCoreNative_nativeWebLogonBody(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
@@ -453,5 +496,28 @@ mod tests {
         assert_eq!(i64::from_le_bytes(encoded[28..36].try_into().unwrap()), 8600);
         let header_len = u32::from_le_bytes(encoded[36..40].try_into().unwrap()) as usize;
         assert_eq!(&encoded[40..40 + header_len], b"https://cdn.example/header.jpg");
+    }
+
+    #[test]
+    fn achievement_details_bridge_layout_is_stable() {
+        let encoded = serialize_achievement_details(&[AchievementDetail {
+            api_name: "ACH_WIN".to_string(),
+            display_name: "Winner".to_string(),
+            description: "Win once".to_string(),
+            achieved: true,
+            unlock_time_seconds: Some(1_700_000_000),
+            icon_url: Some("https://cdn.example/icon.jpg".to_string()),
+            locked_icon_url: None,
+        }])
+        .unwrap();
+
+        assert_eq!(&encoded[0..4], b"MSA1");
+        assert_eq!(u32::from_le_bytes(encoded[4..8].try_into().unwrap()), 1);
+        assert_eq!(i32::from_le_bytes(encoded[8..12].try_into().unwrap()), 1);
+        assert_eq!(i32::from_le_bytes(encoded[12..16].try_into().unwrap()), 1);
+        assert_eq!(
+            i64::from_le_bytes(encoded[16..24].try_into().unwrap()),
+            1_700_000_000
+        );
     }
 }

@@ -126,6 +126,16 @@ internal object RustSteamCoreNative {
             ?.takeIf { it.isNotEmpty() }
     }
 
+    fun parseAchievementDetailsOrNull(
+        definitionsResponse: ByteArray,
+        userResponse: ByteArray
+    ): ByteArray? {
+        if (!loaded) return null
+        return runCatching {
+            nativeParseAchievementDetails(definitionsResponse, userResponse)
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
     fun webLogonBodyOrNull(webLogonToken: String): ByteArray? {
         if (!loaded) return null
         return runCatching { nativeWebLogonBody(webLogonToken) }
@@ -188,6 +198,12 @@ internal object RustSteamCoreNative {
 
     @JvmStatic
     private external fun nativeParseStoreItems(response: ByteArray): ByteArray
+
+    @JvmStatic
+    private external fun nativeParseAchievementDetails(
+        definitionsResponse: ByteArray,
+        userResponse: ByteArray
+    ): ByteArray
 
     @JvmStatic
     private external fun nativeWebLogonBody(webLogonToken: String): ByteArray
