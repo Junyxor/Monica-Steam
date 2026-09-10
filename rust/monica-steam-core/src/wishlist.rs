@@ -192,7 +192,7 @@ fn has_kotlin_bytes(field: &ProtoFieldRef<'_>) -> bool {
     !matches!(field.value, ProtoValueRef::Varint(_))
 }
 
-fn kotlin_bytes(field: &ProtoFieldRef<'_>) -> Option<&[u8]> {
+fn kotlin_bytes<'data>(field: &ProtoFieldRef<'data>) -> Option<&'data [u8]> {
     match field.value {
         ProtoValueRef::Bytes(bytes) => Some(bytes),
         // SteamProtoReader materializes fixed-width values as ByteArray too,
