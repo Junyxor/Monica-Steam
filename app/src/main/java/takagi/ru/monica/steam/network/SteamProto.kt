@@ -2,8 +2,14 @@ package takagi.ru.monica.steam.network
 
 import java.io.ByteArrayOutputStream
 
-class SteamProtoWriter {
+class SteamProtoWriter private constructor(initialPayload: ByteArray?) {
     private val out = ByteArrayOutputStream()
+
+    init {
+        initialPayload?.let(out::write)
+    }
+
+    constructor() : this(null)
 
     fun toByteArray(): ByteArray = out.toByteArray()
 
@@ -85,6 +91,11 @@ class SteamProtoWriter {
             current = current shr 7
         }
         out.write(current.toInt())
+    }
+
+    companion object {
+        /** Wrap an already encoded protobuf message without re-encoding its fields. */
+        fun fromEncoded(payload: ByteArray): SteamProtoWriter = SteamProtoWriter(payload)
     }
 }
 
