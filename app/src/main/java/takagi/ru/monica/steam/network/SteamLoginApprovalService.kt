@@ -1,6 +1,5 @@
 package takagi.ru.monica.steam.network
 
-import java.math.BigInteger
 import java.net.URI
 import java.net.URLDecoder
 import java.util.Locale
@@ -55,13 +54,8 @@ data class SteamQrChallenge(
 
         private fun parseUnsignedClientId(value: String): Long? {
             if (value.isEmpty() || value.any { it !in '0'..'9' }) return null
-            val unsigned = runCatching { BigInteger(value) }.getOrNull() ?: return null
-            if (unsigned <= BigInteger.ZERO || unsigned > UNSIGNED_LONG_MAX) return null
-            return if (unsigned <= SIGNED_LONG_MAX) {
-                unsigned.longValueExact()
-            } else {
-                unsigned.subtract(UNSIGNED_LONG_BASE).longValueExact()
-            }
+            val unsigned = value.toULongOrNull()?.takeIf { it != 0uL } ?: return null
+            return unsigned.toLong()
         }
 
         private fun unwrapSteamOpenUrl(value: String): String? {
@@ -88,9 +82,6 @@ data class SteamQrChallenge(
         )
         private val URL_PATTERN = Regex("""(?:https?://|steam://)\S+""", RegexOption.IGNORE_CASE)
         private val STEAM_OPEN_URL_PATTERN = Regex("""^steam://openurl/(.+)$""", RegexOption.IGNORE_CASE)
-        private val SIGNED_LONG_MAX = BigInteger.valueOf(Long.MAX_VALUE)
-        private val UNSIGNED_LONG_BASE = BigInteger.ONE.shiftLeft(Long.SIZE_BITS)
-        private val UNSIGNED_LONG_MAX = UNSIGNED_LONG_BASE.subtract(BigInteger.ONE)
     }
 }
 
@@ -125,14 +116,24 @@ class SteamLoginApprovalService(
         val request = SteamProtoWriter().apply {
             writeVarint(1, clientId)
         }
-        val fields = SteamProtoReader(
-            api.callProtobuf(
-                iface = "IAuthenticationService",
-                method = "GetAuthSessionInfo",
-                request = request,
-                accessToken = token
+        val response = api.callProtobuf(
+            iface = "IAuthenticationService",
+            method = "GetAuthSessionInfo",
+            request = request,
+            accessToken = token
+        )
+        val native = RustAuthSessionParser.sessionInfoOrNull(response)
+        if (native != null) {
+            return SteamPendingLogin(
+                clientId = clientId,
+                version = native.version,
+                ip = native.ip,
+                city = native.city,
+                country = native.country,
+                deviceName = native.deviceName
             )
-        ).parse()
+        }
+        val fields = SteamProtoReader(response).parse()
         return SteamPendingLogin(
             clientId = clientId,
             version = fields[8]?.asInt ?: 0,
@@ -174,14 +175,14 @@ class SteamLoginApprovalService(
             writeBool(5, approve)
             writeVarint(6, 1L)
         }
-        val responseFields = SteamProtoReader(
-            api.callProtobuf(
-                iface = "IAuthenticationService",
-                method = "UpdateAuthSessionWithMobileConfirmation",
-                request = request,
-                accessToken = token
-            )
-        ).parse()
+        val response = api.callProtobuf(
+            iface = "IAuthenticationService",
+            method = "UpdateAuthSessionWithMobileConfirmation",
+            request = request,
+            accessToken = token
+        )
+        RustAuthSessionParser.confirmationSuccessOrNull(response)?.let { return it }
+        val responseFields = SteamProtoReader(response).parse()
         return responseFields.isEmpty() || (responseFields[1]?.asBool ?: true)
     }
 
@@ -193,6 +194,7 @@ class SteamLoginApprovalService(
             accessToken = accessToken,
             useGet = true
         )
+        RustAuthSessionParser.pendingClientIdsOrNull(bytes)?.let { return it }
         return SteamProtoReader(bytes).parseAll().flatMap { field ->
             if (field.number != 1) {
                 emptyList()
