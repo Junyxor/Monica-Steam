@@ -116,6 +116,26 @@ jobs:
           grep -q 'lib/arm64-v8a/libmonica_steam_android.so' apk-contents.txt
           grep -q 'lib/armeabi-v7a/libmonica_steam_android.so' apk-contents.txt
 
+      - name: Write APK checksums
+        shell: bash
+        run: |
+          mapfile -t apks < <(find app/build/outputs/apk -type f -iname '*.apk' -print | sort)
+          test "${#apks[@]}" -gt 0
+          sha256sum "${apks[@]}" > apk-sha256.txt
+          cat apk-sha256.txt
+
+      - name: Upload debug APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: monica-steam-rust-debug-${{ github.run_number }}
+          path: |
+            app/build/outputs/apk/**/*.APK
+            app/build/outputs/apk/**/*.apk
+            apk-sha256.txt
+            apk-contents.txt
+          if-no-files-found: error
+          retention-days: 7
+
   network-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 45

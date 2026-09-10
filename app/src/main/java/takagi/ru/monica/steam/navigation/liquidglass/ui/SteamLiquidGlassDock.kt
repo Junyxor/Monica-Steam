@@ -131,11 +131,6 @@ private val SteamLiquidGlassIndicatorHighlight = Highlight(
 )
 private val SteamLiquidGlassIdleIndicatorHighlight =
     SteamLiquidGlassIndicatorHighlight.copy(alpha = 0f)
-private val SteamLiquidGlassIdleInnerShadow = LiquidGlassInnerShadow(
-    radius = 0.dp,
-    color = Color.Black.copy(alpha = 0.15f),
-    alpha = 0f
-)
 
 private const val LIGHT_REFERENCE_X = 0.5f
 private const val LIGHT_REFERENCE_Y = 0.7f
@@ -463,7 +458,7 @@ internal fun SteamLiquidGlassDock(
                                     .liquidGlassInnerShadow(shape = shellShape) {
                                         val progress = motionState.pressProgress
                                         if (progress == 0f) {
-                                            SteamLiquidGlassIdleInnerShadow
+                                            null
                                         } else {
                                             LiquidGlassInnerShadow(
                                                 radius = 8.dp * progress,
