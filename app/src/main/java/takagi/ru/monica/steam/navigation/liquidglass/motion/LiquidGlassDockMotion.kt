@@ -16,7 +16,6 @@ import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellati
 import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,7 +24,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.util.fastCoerceIn
@@ -142,7 +140,10 @@ internal class LiquidGlassDockMotionState internal constructor(
     val dragOffset: Float get() = offsetAnimation.value
     val isRunning: Boolean get() = valueAnimation.isRunning
 
-    var velocityPxPerSecond by mutableFloatStateOf(0f)
+    // This is a pointer-input mailbox consumed by the frame-coalesced drag job,
+    // not observable UI state. Keeping it outside SnapshotState avoids a snapshot
+    // write for every high-frequency touch sample.
+    var velocityPxPerSecond: Float = 0f
         private set
 
     var isDragging by mutableStateOf(false)
