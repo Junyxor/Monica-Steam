@@ -9,8 +9,13 @@ import takagi.ru.monica.steam.core.RustSteamCoreNative
 internal object RustOwnedGamesParser {
     fun parseOrNull(response: ByteArray): List<SteamGame>? {
         val payload = RustSteamCoreNative.parseOwnedGamesOrNull(response) ?: return null
-        return runCatching { decode(payload) }.getOrNull()
+        return decodeOrNull(payload)
     }
+
+    internal fun decodeForTest(payload: ByteArray): List<SteamGame>? = decodeOrNull(payload)
+
+    private fun decodeOrNull(payload: ByteArray): List<SteamGame>? =
+        runCatching { decode(payload) }.getOrNull()
 
     private fun decode(payload: ByteArray): List<SteamGame> {
         val buffer = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
