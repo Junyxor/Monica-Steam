@@ -1,3 +1,5 @@
+mod family_bridge;
+
 use jni::{
     objects::{JByteArray, JClass, JString},
     sys::{jbyteArray, jint, jlong, jstring},
