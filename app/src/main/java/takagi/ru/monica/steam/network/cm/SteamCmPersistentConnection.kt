@@ -15,6 +15,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
+import okio.ByteString.Companion.toByteString
 import takagi.ru.monica.steam.network.SteamApiException
 import takagi.ru.monica.steam.network.SteamProtoReader
 
@@ -373,6 +374,5 @@ internal class SteamCmPersistentConnection(
                 (jobId == SteamCmProtocol.JOB_ID_NONE || envelope.header.jobIdTarget == jobId)
     }
 
-    private fun ByteArray.toByteStringNoSpread(): ByteString =
-        ByteString.of(this, 0, size)
+    private fun ByteArray.toByteStringNoSpread(): ByteString = toByteString()
 }
