@@ -122,7 +122,6 @@ internal class LiquidGlassDockMotionState internal constructor(
     private val scaleYAnimation = Animatable(1f, 0.001f)
     private val offsetAnimation = Animatable(0f)
     private val mutatorMutex = MutatorMutex()
-    private val deformationVelocityTracker = VelocityTracker()
 
     private var motionGeneration = 0
     private var valueJob: Job? = null
@@ -159,7 +158,6 @@ internal class LiquidGlassDockMotionState internal constructor(
     }
 
     private fun press() {
-        deformationVelocityTracker.resetTracking()
         releaseJob?.cancel()
         releaseJob = scope.launch {
             launch { pressProgressAnimation.animateTo(1f, pressProgressAnimationSpec) }
@@ -201,16 +199,17 @@ internal class LiquidGlassDockMotionState internal constructor(
         }
     }
 
-    private suspend fun updateDeformationVelocity(position: Float) {
+    private suspend fun updateDeformationVelocity(
+        gestureVelocityPxPerSecond: Float,
+        itemWidthPx: Float
+    ) {
         val valueRange = (itemCount - 1).toFloat().coerceAtLeast(1f)
-        deformationVelocityTracker.addPosition(
-            System.currentTimeMillis(),
-            Offset(position, 0f)
-        )
-        val targetVelocity = deformationVelocityTracker.calculateVelocity().x / valueRange
-        // During a drag the finger already supplies a fresh value every pointer
-        // event. Springing toward every sample only creates cancellation churn and
-        // visual lag; snap while dragging, then spring back to zero after release.
+        val targetVelocity = resolveLiquidGlassDockVelocityItemsPerSecond(
+            velocityPxPerSecond = gestureVelocityPxPerSecond,
+            itemWidthPx = itemWidthPx
+        ) / valueRange
+        // The gesture layer already owns a VelocityTracker. Reusing its result
+        // avoids a second tracker + calculateVelocity() pass on every pointer event.
         velocityAnimation.snapTo(targetVelocity)
     }
 
@@ -247,6 +246,7 @@ internal class LiquidGlassDockMotionState internal constructor(
             isDragging = true
             startNewMotion()
             valueJob?.cancel()
+            valueJob = null
             offsetJob?.cancel()
             velocityJob?.cancel()
             desiredValue = valueAnimation.value
@@ -271,13 +271,22 @@ internal class LiquidGlassDockMotionState internal constructor(
         )
         desiredOffset += dragAmountPx
 
-        val clampedValue = desiredValue.fastCoerceIn(0f, (itemCount - 1).toFloat())
-        val nextOffset = desiredOffset
-        valueJob?.cancel()
+        // Pointer input can arrive much faster than display frames. The old path
+        // cancelled and relaunched a coroutine for every event, only to snap the
+        // same Animatables again. Keep the freshest desired state and commit it at
+        // most once per frame instead.
+        if (valueJob?.isActive == true) return
         valueJob = scope.launch {
-            valueAnimation.snapTo(clampedValue)
-            offsetAnimation.snapTo(nextOffset)
-            updateDeformationVelocity(clampedValue)
+            awaitFrame()
+            val latestValue = desiredValue.fastCoerceIn(0f, (itemCount - 1).toFloat())
+            val latestOffset = desiredOffset
+            val latestVelocityPxPerSecond = velocityPxPerSecond
+            valueAnimation.snapTo(latestValue)
+            offsetAnimation.snapTo(latestOffset)
+            updateDeformationVelocity(
+                gestureVelocityPxPerSecond = latestVelocityPxPerSecond,
+                itemWidthPx = itemWidthPx
+            )
         }
     }
 
@@ -301,6 +310,7 @@ internal class LiquidGlassDockMotionState internal constructor(
     fun onDragEnd(velocityX: Float, itemWidthPx: Float) {
         if (itemWidthPx <= 0f || itemCount <= 0) return
         valueJob?.cancel()
+        valueJob = null
         isDragging = false
         isSettlingDrag = true
         val generation = motionGeneration
