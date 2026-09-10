@@ -123,6 +123,8 @@ jobs:
           --tests 'takagi.ru.monica.steam.friends.chat.data.SteamFriendChatServiceTest'
           --tests 'takagi.ru.monica.steam.friends.chat.data.SteamFriendChatRealtimeParserTest'
           --tests 'takagi.ru.monica.steam.library.RustOwnedGamesParserTest'
+          --tests 'takagi.ru.monica.steam.library.RustAchievementProgressParserTest'
+          --tests 'takagi.ru.monica.steam.library.SteamLibraryModelsTest'
           --tests 'takagi.ru.monica.steam.navigation.liquidglass.motion.LiquidGlassDockMotionTest'
           --tests 'takagi.ru.monica.steam.network.optimization.SteamCustomHostsDnsTest'
           --tests 'takagi.ru.monica.steam.network.optimization.SteamDynamicDnsTest'

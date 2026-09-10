@@ -131,6 +131,8 @@ internal class LiquidGlassDockMotionState internal constructor(
     private var offsetJob: Job? = null
     private var desiredValue = initialIndex.toFloat()
     private var desiredOffset = 0f
+    private var pointerPressed = false
+    private var isSettlingDrag = false
 
     val value: Float get() = valueAnimation.value
     val targetValue: Float get() = valueAnimation.targetValue
@@ -152,6 +154,7 @@ internal class LiquidGlassDockMotionState internal constructor(
 
     private fun startNewMotion(): Int {
         motionGeneration += 1
+        isSettlingDrag = false
         return motionGeneration
     }
 
@@ -249,7 +252,10 @@ internal class LiquidGlassDockMotionState internal constructor(
             desiredValue = valueAnimation.value
             desiredOffset = offsetAnimation.value
             velocityPxPerSecond = 0f
-            press()
+            // A normal pointer drag has already received setPressed(true) from
+            // the input target. Only synthesize press feedback for callers that
+            // begin a drag without that interaction signal.
+            if (!pointerPressed) press()
         }
         velocityPxPerSecond = gestureVelocityPxPerSecond
 
@@ -277,15 +283,26 @@ internal class LiquidGlassDockMotionState internal constructor(
 
     fun setPressed(pressed: Boolean) {
         if (pressed) {
+            if (pointerPressed) return
+            pointerPressed = true
+            if (isSettlingDrag) startNewMotion()
             press()
-        } else if (!isDragging) {
-            releasePressVisuals()
+        } else {
+            pointerPressed = false
+            // InteractionSource emits Release around the same time as onDragEnd.
+            // Do not let that release cancel releaseAfterSettled(), otherwise the
+            // drag can visually settle without dispatching onIndexChanged().
+            if (!isDragging && !isSettlingDrag) {
+                releasePressVisuals()
+            }
         }
     }
 
     fun onDragEnd(velocityX: Float, itemWidthPx: Float) {
         if (itemWidthPx <= 0f || itemCount <= 0) return
+        valueJob?.cancel()
         isDragging = false
+        isSettlingDrag = true
         val generation = motionGeneration
         velocityPxPerSecond = velocityX
         val releaseTargetIndex = resolveLiquidGlassDockReleaseTargetIndex(
@@ -299,6 +316,7 @@ internal class LiquidGlassDockMotionState internal constructor(
         desiredValue = releaseTargetIndex.toFloat()
         desiredOffset = 0f
         animateToValue(releaseTargetIndex.toFloat()) {
+            isSettlingDrag = false
             if (generation == motionGeneration) {
                 velocityPxPerSecond = 0f
                 onIndexChanged(releaseTargetIndex)
