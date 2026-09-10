@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellati
 import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,6 +25,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.util.fastCoerceIn
@@ -120,6 +122,7 @@ internal class LiquidGlassDockMotionState internal constructor(
     private val scaleYAnimation = Animatable(1f, 0.001f)
     private val offsetAnimation = Animatable(0f)
     private val mutatorMutex = MutatorMutex()
+    private val deformationVelocityTracker = VelocityTracker()
 
     private var motionGeneration = 0
     private var valueJob: Job? = null
@@ -127,9 +130,6 @@ internal class LiquidGlassDockMotionState internal constructor(
     private var releaseJob: Job? = null
     private var offsetJob: Job? = null
     private var desiredValue = initialIndex.toFloat()
-    private var desiredOffset = 0f
-    private var pointerPressed = false
-    private var isSettlingDrag = false
 
     val value: Float get() = valueAnimation.value
     val targetValue: Float get() = valueAnimation.targetValue
@@ -140,10 +140,7 @@ internal class LiquidGlassDockMotionState internal constructor(
     val dragOffset: Float get() = offsetAnimation.value
     val isRunning: Boolean get() = valueAnimation.isRunning
 
-    // This is a pointer-input mailbox consumed by the frame-coalesced drag job,
-    // not observable UI state. Keeping it outside SnapshotState avoids a snapshot
-    // write for every high-frequency touch sample.
-    var velocityPxPerSecond: Float = 0f
+    var velocityPxPerSecond by mutableFloatStateOf(0f)
         private set
 
     var isDragging by mutableStateOf(false)
@@ -154,11 +151,11 @@ internal class LiquidGlassDockMotionState internal constructor(
 
     private fun startNewMotion(): Int {
         motionGeneration += 1
-        isSettlingDrag = false
         return motionGeneration
     }
 
     private fun press() {
+        deformationVelocityTracker.resetTracking()
         releaseJob?.cancel()
         releaseJob = scope.launch {
             launch { pressProgressAnimation.animateTo(1f, pressProgressAnimationSpec) }
@@ -167,23 +164,7 @@ internal class LiquidGlassDockMotionState internal constructor(
         }
     }
 
-    /**
-     * Tap feedback should be brief. Keeping pressProgress at 1 until the pill has
-     * completely travelled forces the expensive lens, chromatic-aberration and
-     * inner-shadow layers to redraw while the destination page is cold-composed.
-     */
-    private fun releasePressVisuals() {
-        releaseJob?.cancel()
-        releaseJob = scope.launch {
-            awaitFrame()
-            launch { pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec) }
-            launch { scaleXAnimation.animateTo(1f, scaleXAnimationSpec) }
-            launch { scaleYAnimation.animateTo(1f, scaleYAnimationSpec) }
-        }
-    }
-
-    /** Drag release keeps the deformation alive until the pill is nearly settled. */
-    private fun releaseAfterSettled(onSettled: (() -> Unit)? = null) {
+    private fun release(onSettled: (() -> Unit)? = null) {
         releaseJob?.cancel()
         releaseJob = scope.launch {
             awaitFrame()
@@ -200,26 +181,22 @@ internal class LiquidGlassDockMotionState internal constructor(
         }
     }
 
-    private suspend fun updateDeformationVelocity(
-        gestureVelocityPxPerSecond: Float,
-        itemWidthPx: Float
-    ) {
+    private fun updateDeformationVelocity(position: Float) {
         val valueRange = (itemCount - 1).toFloat().coerceAtLeast(1f)
-        val targetVelocity = resolveLiquidGlassDockVelocityItemsPerSecond(
-            velocityPxPerSecond = gestureVelocityPxPerSecond,
-            itemWidthPx = itemWidthPx
-        ) / valueRange
-        // The gesture layer already owns a VelocityTracker. Reusing its result
-        // avoids a second tracker + calculateVelocity() pass on every pointer event.
-        velocityAnimation.snapTo(targetVelocity)
+        deformationVelocityTracker.addPosition(
+            System.currentTimeMillis(),
+            Offset(position, 0f)
+        )
+        val targetVelocity = deformationVelocityTracker.calculateVelocity().x / valueRange
+        velocityJob = scope.launch {
+            velocityAnimation.animateTo(targetVelocity, velocityAnimationSpec)
+        }
     }
 
     private fun animateToValue(value: Float, onSettled: (() -> Unit)? = null) {
         scope.launch {
             mutatorMutex.mutate {
-                // Pointer press and drag-start already own the glass deformation.
-                // Re-pressing here cancels/restarts three Animatables exactly when
-                // a cold destination page begins composing, which causes tap jank.
+                press()
                 val nextTarget = value.fastCoerceIn(0f, (itemCount - 1).toFloat())
                 targetIndex = nextTarget.roundToInt().coerceIn(0, itemCount - 1)
                 valueJob?.cancel()
@@ -228,11 +205,7 @@ internal class LiquidGlassDockMotionState internal constructor(
                     velocityJob?.cancel()
                     velocityJob = launch { velocityAnimation.animateTo(0f, velocityAnimationSpec) }
                 }
-                if (onSettled == null) {
-                    releasePressVisuals()
-                } else {
-                    releaseAfterSettled(onSettled)
-                }
+                release(onSettled)
             }
         }
     }
@@ -247,16 +220,12 @@ internal class LiquidGlassDockMotionState internal constructor(
             isDragging = true
             startNewMotion()
             valueJob?.cancel()
-            valueJob = null
             offsetJob?.cancel()
-            velocityJob?.cancel()
             desiredValue = valueAnimation.value
-            desiredOffset = offsetAnimation.value
             velocityPxPerSecond = 0f
-            // A normal pointer drag has already received setPressed(true) from
-            // the input target. Only synthesize press feedback for callers that
-            // begin a drag without that interaction signal.
-            if (!pointerPressed) press()
+            velocityJob?.cancel()
+            velocityJob = scope.launch { velocityAnimation.snapTo(0f) }
+            press()
         }
         velocityPxPerSecond = gestureVelocityPxPerSecond
 
@@ -270,50 +239,31 @@ internal class LiquidGlassDockMotionState internal constructor(
             -dragSpec.overscrollLimitItems,
             (itemCount - 1).toFloat() + dragSpec.overscrollLimitItems
         )
-        desiredOffset += dragAmountPx
 
-        // Pointer input can arrive much faster than display frames. The old path
-        // cancelled and relaunched a coroutine for every event, only to snap the
-        // same Animatables again. Keep the freshest desired state and commit it at
-        // most once per frame instead.
-        if (valueJob?.isActive == true) return
+        val clampedValue = desiredValue.fastCoerceIn(0f, (itemCount - 1).toFloat())
+        valueJob?.cancel()
         valueJob = scope.launch {
-            awaitFrame()
-            val latestValue = desiredValue.fastCoerceIn(0f, (itemCount - 1).toFloat())
-            val latestOffset = desiredOffset
-            val latestVelocityPxPerSecond = velocityPxPerSecond
-            valueAnimation.snapTo(latestValue)
-            offsetAnimation.snapTo(latestOffset)
-            updateDeformationVelocity(
-                gestureVelocityPxPerSecond = latestVelocityPxPerSecond,
-                itemWidthPx = itemWidthPx
-            )
+            valueAnimation.snapTo(clampedValue)
+            updateDeformationVelocity(clampedValue)
+        }
+
+        offsetJob?.cancel()
+        offsetJob = scope.launch {
+            offsetAnimation.snapTo(offsetAnimation.value + dragAmountPx)
         }
     }
 
     fun setPressed(pressed: Boolean) {
         if (pressed) {
-            if (pointerPressed) return
-            pointerPressed = true
-            if (isSettlingDrag) startNewMotion()
             press()
-        } else {
-            pointerPressed = false
-            // InteractionSource emits Release around the same time as onDragEnd.
-            // Do not let that release cancel releaseAfterSettled(), otherwise the
-            // drag can visually settle without dispatching onIndexChanged().
-            if (!isDragging && !isSettlingDrag) {
-                releasePressVisuals()
-            }
+        } else if (!isDragging) {
+            release()
         }
     }
 
     fun onDragEnd(velocityX: Float, itemWidthPx: Float) {
         if (itemWidthPx <= 0f || itemCount <= 0) return
-        valueJob?.cancel()
-        valueJob = null
         isDragging = false
-        isSettlingDrag = true
         val generation = motionGeneration
         velocityPxPerSecond = velocityX
         val releaseTargetIndex = resolveLiquidGlassDockReleaseTargetIndex(
@@ -325,9 +275,7 @@ internal class LiquidGlassDockMotionState internal constructor(
         )
         targetIndex = releaseTargetIndex
         desiredValue = releaseTargetIndex.toFloat()
-        desiredOffset = 0f
         animateToValue(releaseTargetIndex.toFloat()) {
-            isSettlingDrag = false
             if (generation == motionGeneration) {
                 velocityPxPerSecond = 0f
                 onIndexChanged(releaseTargetIndex)
