@@ -212,7 +212,9 @@ internal class LiquidGlassDockMotionState internal constructor(
     private fun animateToValue(value: Float, onSettled: (() -> Unit)? = null) {
         scope.launch {
             mutatorMutex.mutate {
-                press()
+                // Pointer press and drag-start already own the glass deformation.
+                // Re-pressing here cancels/restarts three Animatables exactly when
+                // a cold destination page begins composing, which causes tap jank.
                 val nextTarget = value.fastCoerceIn(0f, (itemCount - 1).toFloat())
                 targetIndex = nextTarget.roundToInt().coerceIn(0, itemCount - 1)
                 valueJob?.cancel()
