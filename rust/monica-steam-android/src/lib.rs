@@ -9,4 +9,5 @@ mod library_bridge;
 mod login_auth_bridge;
 mod ma_file_bridge;
 mod trade_bridge;
+mod two_factor_bridge;
 mod wishlist_bridge;
