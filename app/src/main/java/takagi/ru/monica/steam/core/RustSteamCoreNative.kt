@@ -313,6 +313,60 @@ internal object RustSteamCoreNative {
             ?.takeIf { it.isNotEmpty() }
     }
 
+    fun buildAddAuthenticatorOrNull(steamId: String, authTime: Long, deviceId: String): ByteArray? {
+        if (!loaded) return null
+        return runCatching { nativeBuildAddAuthenticator(steamId, authTime, deviceId) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    fun parseAddAuthenticatorOrNull(response: ByteArray): ByteArray? {
+        if (!loaded || response.isEmpty()) return null
+        return runCatching { nativeParseAddAuthenticator(response) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    fun buildFinalizeAuthenticatorOrNull(
+        steamId: String,
+        authenticatorCode: String,
+        authTime: Long,
+        activationCode: String,
+        validateSmsCode: Boolean
+    ): ByteArray? {
+        if (!loaded) return null
+        return runCatching {
+            nativeBuildFinalizeAuthenticator(
+                steamId,
+                authenticatorCode,
+                authTime,
+                activationCode,
+                validateSmsCode
+            )
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
+    fun parseFinalizeAuthenticatorOrNull(response: ByteArray): ByteArray? {
+        if (!loaded || response.isEmpty()) return null
+        return runCatching { nativeParseFinalizeAuthenticator(response) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    fun buildReplaceAuthenticatorContinueOrNull(code: String): ByteArray? {
+        if (!loaded) return null
+        return runCatching { nativeBuildReplaceAuthenticatorContinue(code) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    fun parseReplaceAuthenticatorContinueOrNull(response: ByteArray): ByteArray? {
+        if (!loaded || response.isEmpty()) return null
+        return runCatching { nativeParseReplaceAuthenticatorContinue(response) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
     fun parseGroupChatHistoryOrNull(response: ByteArray): ByteArray? {
         if (!loaded || response.isEmpty()) return null
         return runCatching { nativeParseGroupChatHistory(response) }
@@ -374,6 +428,12 @@ internal object RustSteamCoreNative {
     @JvmStatic private external fun nativeParseLoginPoll(response: ByteArray): ByteArray
     @JvmStatic private external fun nativeBuildLoginAccessToken(refreshToken: String, steamId: String): ByteArray
     @JvmStatic private external fun nativeParseLoginAccessToken(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeBuildAddAuthenticator(steamId: String, authTime: Long, deviceId: String): ByteArray
+    @JvmStatic private external fun nativeParseAddAuthenticator(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeBuildFinalizeAuthenticator(steamId: String, authenticatorCode: String, authTime: Long, activationCode: String, validateSmsCode: Boolean): ByteArray
+    @JvmStatic private external fun nativeParseFinalizeAuthenticator(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeBuildReplaceAuthenticatorContinue(code: String): ByteArray
+    @JvmStatic private external fun nativeParseReplaceAuthenticatorContinue(response: ByteArray): ByteArray
     @JvmStatic private external fun nativeParseGroupChatHistory(response: ByteArray): ByteArray
     @JvmStatic private external fun nativeParseGroupChatSummaries(response: ByteArray): ByteArray
     @JvmStatic private external fun nativeWebLogonBody(webLogonToken: String): ByteArray
