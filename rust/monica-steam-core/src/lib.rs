@@ -2,6 +2,7 @@ pub mod achievement;
 pub mod chat;
 pub mod cm;
 pub mod family;
+pub mod friend_nickname;
 pub mod group_chat;
 pub mod group_summary;
 pub mod library;
