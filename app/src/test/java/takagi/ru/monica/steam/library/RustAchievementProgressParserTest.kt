@@ -2,9 +2,9 @@ package takagi.ru.monica.steam.library
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.test.assertEquals
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RustAchievementProgressParserTest {
