@@ -6,6 +6,7 @@ mod friend_bridge;
 mod group_chat_bridge;
 mod guard_bridge;
 mod library_bridge;
+mod login_auth_bridge;
 mod ma_file_bridge;
 mod trade_bridge;
 mod wishlist_bridge;
