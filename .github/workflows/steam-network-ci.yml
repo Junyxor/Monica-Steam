@@ -22,12 +22,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Rust 1.76 workspace MSRV
+      - name: Set up Rust 1.75 core MSRV
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.76.0
+          toolchain: 1.75.0
 
       - name: Test Rust Steam core
+        run: cargo test --manifest-path rust/monica-steam-core/Cargo.toml --all-targets
+
+  rust-workspace-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust 1.77 workspace MSRV
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.77.0
+
+      - name: Test Rust workspace
         run: cargo test --manifest-path rust/Cargo.toml --workspace --all-targets
 
   rust-android-smoke:
