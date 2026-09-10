@@ -94,7 +94,7 @@ internal class SteamCmPersistentConnection(
             jobIdSource = SteamCmProtocol.JOB_ID_NONE,
             targetJobName = operation.targetJobName
         )
-        if (socket?.send(ByteString.of(*encoded)) != true) {
+        if (socket?.send(encoded.toByteStringNoSpread()) != true) {
             throw IOException("Steam CM notification send failed")
         }
     }
@@ -155,7 +155,7 @@ internal class SteamCmPersistentConnection(
             jobIdSource = jobId,
             targetJobName = operation.targetJobName
         )
-        if (socket?.send(ByteString.of(*encoded)) != true) {
+        if (socket?.send(encoded.toByteStringNoSpread()) != true) {
             pending.remove(request)
             throw IOException("Steam CM operation send failed")
         }
@@ -242,7 +242,7 @@ internal class SteamCmPersistentConnection(
                 sessionId = 0,
                 body = SteamCmProtocol.webLogonBody(webLogonToken)
             )
-            check(webSocket.send(ByteString.of(*login))) { "Steam CM logon send failed" }
+            check(webSocket.send(login.toByteStringNoSpread())) { "Steam CM logon send failed" }
         }.onFailure { failConnection(webSocket, it) }
     }
 
@@ -372,4 +372,7 @@ internal class SteamCmPersistentConnection(
             envelope.eMsg == responseEMsg &&
                 (jobId == SteamCmProtocol.JOB_ID_NONE || envelope.header.jobIdTarget == jobId)
     }
+
+    private fun ByteArray.toByteStringNoSpread(): ByteString =
+        ByteString.of(this, 0, size)
 }
