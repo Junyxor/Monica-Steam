@@ -56,7 +56,6 @@ impl From<ProtoError> for ChatParseError {
 
 pub fn parse_chat_sessions(response: &[u8]) -> Result<Vec<ChatSession>, ChatParseError> {
     ensure_payload_size(response)?;
-    valueless_guard(response)?;
     let fields = parse_all_ref(response)?;
     let mut sessions = Vec::new();
     let mut seen = HashSet::new();
@@ -205,10 +204,6 @@ fn ensure_payload_size(response: &[u8]) -> Result<(), ChatParseError> {
     } else {
         Ok(())
     }
-}
-
-fn valueless_guard(_response: &[u8]) -> Result<(), ChatParseError> {
-    Ok(())
 }
 
 fn steam_id64_from_account_id(account_id: i64) -> i64 {
