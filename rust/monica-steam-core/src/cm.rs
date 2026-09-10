@@ -110,7 +110,10 @@ fn decode_messages_at_depth(
     }
 
     let fields = parse_all(&envelope.body)?;
-    let compressed_size = field_i64(&fields, 1).unwrap_or(0).max(0) as usize;
+    let compressed_size = match field_i64(&fields, 1) {
+        Some(value) if value > 0 => usize::try_from(value).map_err(|_| CmDecodeError::PayloadTooLarge)?,
+        _ => 0,
+    };
     let packed = field_bytes(&fields, 2).ok_or(CmDecodeError::MultiMissingPayload)?;
 
     let unpacked = if compressed_size > 0 {
