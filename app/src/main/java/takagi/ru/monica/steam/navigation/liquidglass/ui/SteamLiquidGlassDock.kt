@@ -254,11 +254,15 @@ internal fun SteamLiquidGlassDock(
         }
         val selectedColor = MaterialTheme.colorScheme.primary
         val unselectedColor = MaterialTheme.colorScheme.onSurface
-        val tabsBackdrop = rememberLayerBackdrop()
-        val combinedBackdrop = rememberSteamCombinedBackdrop(
-            backdrop.delegate,
-            tabsBackdrop
-        )
+        val tabsBackdrop = if (runtimeSupported) rememberLayerBackdrop() else null
+        val combinedBackdrop = if (runtimeSupported) {
+            rememberSteamCombinedBackdrop(
+                backdrop.delegate,
+                requireNotNull(tabsBackdrop)
+            )
+        } else {
+            null
+        }
         val shellHighlight = rememberGravityRotatedHighlightProvider(
             base = SteamLiquidGlassIndicatorHighlight,
             extraDegrees = -45f,
@@ -355,7 +359,7 @@ internal fun SteamLiquidGlassDock(
                         .align(Alignment.CenterStart)
                         .clearAndSetSemantics {}
                         .liquidGlassCaptureLayer()
-                        .layerBackdrop(tabsBackdrop)
+                        .layerBackdrop(requireNotNull(tabsBackdrop))
                         .graphicsLayer { translationX = panelOffsetPx() }
                         .drawBackdrop(
                             backdrop = backdrop.delegate,
@@ -421,7 +425,7 @@ internal fun SteamLiquidGlassDock(
                             if (runtimeSupported) {
                                 Modifier
                                     .drawBackdrop(
-                                        backdrop = combinedBackdrop,
+                                        backdrop = requireNotNull(combinedBackdrop),
                                         shape = { shellShape },
                                         effects = {
                                             val progress = motionState.pressProgress
