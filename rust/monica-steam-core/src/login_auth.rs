@@ -46,7 +46,7 @@ pub struct AccessTokenResponse {
     pub refresh_token: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LoginAuthError {
     Proto(ProtoError),
     PayloadTooLarge,
@@ -174,7 +174,7 @@ pub fn parse_begin_credentials_response(
     let client_id = first_nonzero_u64(&fields, 1)
         .map(|value| value.to_string())
         .ok_or(LoginAuthError::IncompleteResponse)?;
-    let request_id = first_bytes(&fields, 2)
+    let request_id = first_kotlin_bytes(&fields, 2)
         .filter(|value| !value.is_empty())
         .map(|value| STANDARD.encode(value))
         .ok_or(LoginAuthError::IncompleteResponse)?;
@@ -200,7 +200,7 @@ pub fn parse_begin_qr_response(response: &[u8]) -> Result<BeginQrResponse, Login
     let challenge_url = first_string(&fields, 2)
         .filter(|value| !value.trim().is_empty())
         .ok_or(LoginAuthError::IncompleteResponse)?;
-    let request_id = first_bytes(&fields, 3)
+    let request_id = first_kotlin_bytes(&fields, 3)
         .filter(|value| !value.is_empty())
         .map(|value| STANDARD.encode(value))
         .ok_or(LoginAuthError::IncompleteResponse)?;
@@ -318,7 +318,10 @@ fn decode_request_id(value: &str) -> Option<Vec<u8>> {
     if trimmed.is_empty() {
         return None;
     }
-    let compact: String = trimmed.chars().filter(|value| !value.is_whitespace()).collect();
+    let compact: String = trimmed
+        .chars()
+        .filter(|value| !value.is_whitespace())
+        .collect();
     for engine in [&STANDARD, &STANDARD_NO_PAD, &URL_SAFE, &URL_SAFE_NO_PAD] {
         if let Ok(decoded) = engine.decode(compact.as_bytes()) {
             if !decoded.is_empty() {
@@ -330,7 +333,10 @@ fn decode_request_id(value: &str) -> Option<Vec<u8>> {
 }
 
 fn decode_hex(value: &str) -> Option<Vec<u8>> {
-    if value.is_empty() || value.len() % 2 != 0 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+    if value.is_empty()
+        || value.len() % 2 != 0
+        || !value.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
         return None;
     }
     let mut decoded = Vec::with_capacity(value.len() / 2);
@@ -365,14 +371,14 @@ fn last_nonzero_u64(fields: &[ProtoFieldRef<'_>], number: u32) -> Option<u64> {
         .filter(|value| *value != 0)
 }
 
-fn first_bytes<'a>(fields: &'a [ProtoFieldRef<'a>], number: u32) -> Option<&'a [u8]> {
-    fields
-        .iter()
-        .find(|field| field.number == number)
-        .and_then(|field| match field.value {
-            ProtoValueRef::Bytes(bytes) => Some(bytes),
-            ProtoValueRef::Fixed64(_) | ProtoValueRef::Fixed32(_) | ProtoValueRef::Varint(_) => None,
-        })
+fn first_kotlin_bytes(fields: &[ProtoFieldRef<'_>], number: u32) -> Option<Vec<u8>> {
+    let field = fields.iter().find(|field| field.number == number)?;
+    match field.value {
+        ProtoValueRef::Varint(_) => None,
+        ProtoValueRef::Bytes(bytes) => Some(bytes.to_vec()),
+        ProtoValueRef::Fixed64(value) => Some(value.to_le_bytes().to_vec()),
+        ProtoValueRef::Fixed32(value) => Some(value.to_le_bytes().to_vec()),
+    }
 }
 
 fn first_string(fields: &[ProtoFieldRef<'_>], number: u32) -> Option<String> {
@@ -519,6 +525,16 @@ mod tests {
     }
 
     #[test]
+    fn fixed_request_id_matches_kotlin_bytes_property() {
+        let mut response = ProtoWriter::new();
+        response.write_uint64(1, 7).unwrap();
+        response.write_fixed32(2, 0x0403_0201).unwrap();
+        response.write_uint64(5, 76_561_198_000_000_000).unwrap();
+        let parsed = parse_begin_credentials_response(response.as_bytes()).unwrap();
+        assert_eq!(parsed.request_id, STANDARD.encode([1u8, 2, 3, 4]));
+    }
+
+    #[test]
     fn poll_response_uses_last_duplicates_like_kotlin_parse() {
         let mut response = ProtoWriter::new();
         response.write_uint64(1, 7).unwrap();
@@ -541,7 +557,7 @@ mod tests {
         assert_eq!(decode_request_id("cmVxdWVzdA==").unwrap(), b"request");
         assert_eq!(decode_request_id("_w").unwrap(), vec![0xff]);
         // Android Base64 accepts many alphabetic strings, so use a value that
-        // cannot decode as Base64 to exercise the hex/raw fallbacks.
+        // cannot decode as Base64 to exercise the raw fallback explicitly.
         assert_eq!(decode_request_id("0f:1a").unwrap(), b"0f:1a");
         assert_eq!(decode_hex("0f1a").unwrap(), vec![0x0f, 0x1a]);
     }
@@ -559,7 +575,12 @@ mod tests {
         assert!(matches!(fields[0].value, ProtoValue::Varint(u64::MAX)));
         assert_eq!(fields[2].as_utf8_lossy().as_deref(), Some("ABCDE"));
 
-        let poll = build_poll_request("18446744073709551615", "cmVxdWVzdA==", Some("18446744073709551614")).unwrap();
+        let poll = build_poll_request(
+            "18446744073709551615",
+            "cmVxdWVzdA==",
+            Some("18446744073709551614"),
+        )
+        .unwrap();
         let fields = parse_all(&poll).unwrap();
         assert!(matches!(fields[0].value, ProtoValue::Varint(u64::MAX)));
         assert_eq!(fields[1].as_bytes(), Some(b"request".as_slice()));
