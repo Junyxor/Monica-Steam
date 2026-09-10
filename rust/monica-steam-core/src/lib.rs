@@ -12,6 +12,7 @@ pub mod login_auth;
 pub mod ma_file;
 pub mod proto;
 pub mod trade_offer;
+pub mod two_factor;
 pub mod wishlist;
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
