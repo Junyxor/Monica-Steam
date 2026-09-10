@@ -9,7 +9,8 @@ use monica_steam_core::{
     },
     cm::{decode_messages, encode_message, web_logon_body, CmEnvelope},
     library::{
-        parse_achievement_progress, parse_owned_games, AchievementProgress, OwnedGame,
+        parse_achievement_progress, parse_owned_games, parse_store_items, AchievementProgress,
+        OwnedGame, StoreMetadata,
     },
     generate_auth_code, generate_confirmation_hash, generate_login_approval_signature,
     generate_login_token_signature,
@@ -21,6 +22,7 @@ const CHAT_SESSIONS_BRIDGE_MAGIC: &[u8; 4] = b"MSS1";
 const CHAT_MESSAGES_BRIDGE_MAGIC: &[u8; 4] = b"MSM1";
 const OWNED_GAMES_BRIDGE_MAGIC: &[u8; 4] = b"MSL1";
 const ACHIEVEMENT_PROGRESS_BRIDGE_MAGIC: &[u8; 4] = b"MSP1";
+const STORE_ITEMS_BRIDGE_MAGIC: &[u8; 4] = b"MST1";
 const OPTIONAL_I32_NONE: i32 = i32::MIN;
 
 fn read_jstring(env: &mut JNIEnv<'_>, value: &JString<'_>) -> Option<String> {
@@ -160,6 +162,28 @@ fn serialize_achievement_progress(progress: &[AchievementProgress]) -> Option<Ve
         out.extend_from_slice(&item.unlocked.to_le_bytes());
         out.extend_from_slice(&item.total.to_le_bytes());
         out.extend_from_slice(&(if item.all_unlocked { 1i32 } else { 0i32 }).to_le_bytes());
+    }
+    Some(out)
+}
+
+fn serialize_store_items(items: &[StoreMetadata]) -> Option<Vec<u8>> {
+    let count = u32::try_from(items.len()).ok()?;
+    let mut out = Vec::new();
+    out.extend_from_slice(STORE_ITEMS_BRIDGE_MAGIC);
+    out.extend_from_slice(&count.to_le_bytes());
+    for item in items {
+        out.extend_from_slice(&item.app_id.to_le_bytes());
+        let cloud_state = match item.supports_steam_cloud {
+            Some(true) => 1i32,
+            Some(false) => 0i32,
+            None => -1i32,
+        };
+        out.extend_from_slice(&cloud_state.to_le_bytes());
+        let has_price = item.final_price_minor.is_some() && item.original_price_minor.is_some();
+        out.extend_from_slice(&(if has_price { 1i32 } else { 0i32 }).to_le_bytes());
+        out.extend_from_slice(&item.final_price_minor.unwrap_or(0).to_le_bytes());
+        out.extend_from_slice(&item.original_price_minor.unwrap_or(0).to_le_bytes());
+        write_required_string(&mut out, &item.header_image_url)?;
     }
     Some(out)
 }
@@ -364,6 +388,24 @@ pub extern "system" fn Java_takagi_ru_monica_steam_core_RustSteamCoreNative_nati
 }
 
 #[no_mangle]
+pub extern "system" fn Java_takagi_ru_monica_steam_core_RustSteamCoreNative_nativeParseStoreItems(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    response: JByteArray<'_>,
+) -> jbyteArray {
+    let Ok(response) = env.convert_byte_array(&response) else {
+        return ptr::null_mut();
+    };
+    let Ok(items) = parse_store_items(&response) else {
+        return ptr::null_mut();
+    };
+    let Some(encoded) = serialize_store_items(&items) else {
+        return ptr::null_mut();
+    };
+    write_jbytes(&mut env, &encoded)
+}
+
+#[no_mangle]
 pub extern "system" fn Java_takagi_ru_monica_steam_core_RustSteamCoreNative_nativeWebLogonBody(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
@@ -376,4 +418,40 @@ pub extern "system" fn Java_takagi_ru_monica_steam_core_RustSteamCoreNative_nati
         return ptr::null_mut();
     };
     write_jbytes(&mut env, &encoded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn store_bridge_layout_is_stable() {
+        let encoded = serialize_store_items(&[
+            StoreMetadata {
+                app_id: 730,
+                header_image_url: "https://cdn.example/header.jpg".to_string(),
+                final_price_minor: Some(1290),
+                original_price_minor: Some(8600),
+                supports_steam_cloud: Some(true),
+            },
+            StoreMetadata {
+                app_id: 570,
+                header_image_url: String::new(),
+                final_price_minor: None,
+                original_price_minor: None,
+                supports_steam_cloud: None,
+            },
+        ])
+        .unwrap();
+
+        assert_eq!(&encoded[0..4], b"MST1");
+        assert_eq!(u32::from_le_bytes(encoded[4..8].try_into().unwrap()), 2);
+        assert_eq!(i32::from_le_bytes(encoded[8..12].try_into().unwrap()), 730);
+        assert_eq!(i32::from_le_bytes(encoded[12..16].try_into().unwrap()), 1);
+        assert_eq!(i32::from_le_bytes(encoded[16..20].try_into().unwrap()), 1);
+        assert_eq!(i64::from_le_bytes(encoded[20..28].try_into().unwrap()), 1290);
+        assert_eq!(i64::from_le_bytes(encoded[28..36].try_into().unwrap()), 8600);
+        let header_len = u32::from_le_bytes(encoded[36..40].try_into().unwrap()) as usize;
+        assert_eq!(&encoded[40..40 + header_len], b"https://cdn.example/header.jpg");
+    }
 }
