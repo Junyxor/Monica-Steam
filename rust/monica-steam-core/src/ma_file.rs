@@ -93,6 +93,7 @@ pub fn parse_ma_file_json(
         .unwrap_or_else(|| "Steam".to_string());
 
     let preferred_shared_secret = preferred_shared_secret(&root);
+    let has_preferred_shared_secret = preferred_shared_secret.is_some();
     let session_only_marker = bool_any(
         &root,
         &["monica_session_only_login", "monicaSessionOnlyLogin"],
@@ -129,7 +130,7 @@ pub fn parse_ma_file_json(
             })
             .is_some();
 
-    if preferred_shared_secret.is_none() && !(session_only_marker && has_session_fields) {
+    if !has_preferred_shared_secret && !(session_only_marker && has_session_fields) {
         return Err(MaFileParseError::MissingSharedSecret);
     }
     let shared_secret = match preferred_shared_secret {
@@ -161,7 +162,7 @@ pub fn parse_ma_file_json(
         return Err(MaFileParseError::MissingSteamId);
     };
 
-    if preferred_shared_secret.is_none() && !is_steam_id64_value(&steam_id) {
+    if !has_preferred_shared_secret && !is_steam_id64_value(&steam_id) {
         return Err(MaFileParseError::SessionOnlyMissingSteamId);
     }
 
@@ -328,7 +329,10 @@ fn normalize_steam_shared_secret(
     shared_secret: &str,
     source: SharedSecretSource,
 ) -> Result<String, MaFileParseError> {
-    let compact: String = shared_secret.chars().filter(|value| !value.is_whitespace()).collect();
+    let compact: String = shared_secret
+        .chars()
+        .filter(|value| !value.is_whitespace())
+        .collect();
     let base64_bytes = decode_base64(&compact);
     let base32_bytes = decode_base32(&compact);
     let selected = match source {
@@ -366,7 +370,11 @@ fn decode_base32(value: &str) -> Option<Vec<u8>> {
         .map(|value| value.to_ascii_uppercase())
         .filter(|value| *value != '=' && *value != ' ' && *value != '-')
         .collect();
-    if normalized.is_empty() || normalized.chars().any(|value| !BASE32_ALPHABET.contains(value)) {
+    if normalized.is_empty()
+        || normalized
+            .chars()
+            .any(|value| !BASE32_ALPHABET.contains(value))
+    {
         return None;
     }
 
@@ -420,15 +428,21 @@ fn hex_value(value: u8) -> Option<u8> {
 }
 
 fn steam_id_from_file_name(file_name: &str) -> Option<String> {
-    let normalized = file_name.rsplit(['/', '\\']).next().unwrap_or(file_name);
+    let normalized = file_name
+        .rsplit(|value| value == '/' || value == '\\')
+        .next()
+        .unwrap_or(file_name);
     let bytes = normalized.as_bytes();
     let prefix = b"7656119";
     for start in 0..bytes.len().saturating_sub(16) {
-        if bytes.get(start..start + prefix.len()) != Some(prefix) {
+        let end = start + 17;
+        if end > bytes.len() || &bytes[start..start + prefix.len()] != prefix {
             continue;
         }
-        let end = start + 17;
-        if end > bytes.len() || !bytes[start + 7..end].iter().all(u8::is_ascii_digit) {
+        if !bytes[start + prefix.len()..end]
+            .iter()
+            .all(u8::is_ascii_digit)
+        {
             continue;
         }
         if start > 0 && bytes[start - 1].is_ascii_digit() {
@@ -449,7 +463,10 @@ fn account_name_from_file_name(file_name: &str) -> Option<String> {
 }
 
 fn steam_id_from_steam_login_secure(value: &str) -> Option<String> {
-    let steam_id = value.split_once("||").map(|(steam_id, _)| steam_id).unwrap_or("");
+    let steam_id = value
+        .split_once("||")
+        .map(|(steam_id, _)| steam_id)
+        .unwrap_or("");
     is_steam_id64_value(steam_id).then_some(steam_id.to_string())
 }
 
@@ -665,7 +682,7 @@ mod tests {
     }
 
     #[test]
-    fn filename_can_supply_steamid_and_account_name() {
+    fn filename_steamid_has_precedence_over_filename_account_fallback() {
         let input = format!(r#"{{"shared_secret":"{SECRET_B64}"}}"#);
         let payload = parse_ma_file_json(
             &input,
@@ -676,6 +693,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(payload.steam_id, "76561198000000000");
-        assert_eq!(payload.account_name, "alice.76561198000000000");
+        assert_eq!(payload.account_name, "76561198000000000");
     }
 }
