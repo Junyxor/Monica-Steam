@@ -1,3 +1,4 @@
+pub mod chat;
 pub mod cm;
 pub mod proto;
 
