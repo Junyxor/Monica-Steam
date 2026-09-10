@@ -427,7 +427,7 @@ class SteamGameLibraryService internal constructor(
                     steamId = steamId,
                     appIds = batch,
                     language = language,
-                    accessToken = token
+                    accessToken = accessToken
                 )
             }
             val fetched = result.getOrNull()
