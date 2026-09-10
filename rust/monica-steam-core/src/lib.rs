@@ -8,6 +8,7 @@ pub mod friend_nickname;
 pub mod group_chat;
 pub mod group_summary;
 pub mod library;
+pub mod ma_file;
 pub mod proto;
 pub mod trade_offer;
 pub mod wishlist;
