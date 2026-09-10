@@ -84,6 +84,13 @@ internal object RustSteamCoreNative {
         }.getOrNull()?.takeIf { it.isNotEmpty() }
     }
 
+    fun decodeCmMessagesOrNull(payload: ByteArray): ByteArray? {
+        if (!loaded || payload.isEmpty()) return null
+        return runCatching { nativeDecodeCmMessages(payload) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
     fun webLogonBodyOrNull(webLogonToken: String): ByteArray? {
         if (!loaded) return null
         return runCatching { nativeWebLogonBody(webLogonToken) }
@@ -128,6 +135,9 @@ internal object RustSteamCoreNative {
         jobIdTarget: Long,
         targetJobName: String
     ): ByteArray
+
+    @JvmStatic
+    private external fun nativeDecodeCmMessages(payload: ByteArray): ByteArray
 
     @JvmStatic
     private external fun nativeWebLogonBody(webLogonToken: String): ByteArray
