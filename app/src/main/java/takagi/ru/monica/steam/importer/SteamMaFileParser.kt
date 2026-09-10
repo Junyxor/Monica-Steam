@@ -97,6 +97,14 @@ class SteamMaFileParser(
             decryptEncryptedMaFile(trimmed, fileName, manifestContent, password)
         }
 
+        RustSteamMaFileParser.parseOrNull(
+            plainJson = plainJson,
+            fileName = fileName,
+            displayNameOverride = displayNameOverride,
+            steamIdOverride = steamIdOverride,
+            allowMissingSteamId = allowMissingSteamId
+        )?.let { return it }
+
         val root = json.parseToJsonElement(plainJson).jsonObject
         val session = root.objectAny("Session", "session")
         val embeddedSteamId = root.steamIdAny()
