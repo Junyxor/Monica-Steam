@@ -1,4 +1,6 @@
+mod auth_bridge;
 mod family_bridge;
+mod friend_bridge;
 mod group_chat_bridge;
 mod trade_bridge;
 mod wishlist_bridge;
