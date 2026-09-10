@@ -1,7 +1,8 @@
 use crate::proto::{parse_all_ref, ProtoError, ProtoFieldRef};
+use std::collections::HashMap;
 
 const MAX_LIBRARY_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
-const MAX_OWNED_GAMES: usize = 100_000;
+const MAX_LIBRARY_ITEMS: usize = 100_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OwnedGame {
@@ -14,11 +15,19 @@ pub struct OwnedGame {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AchievementProgress {
+    pub app_id: i32,
+    pub unlocked: i32,
+    pub total: i32,
+    pub all_unlocked: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LibraryParseError {
     Proto(ProtoError),
     PayloadTooLarge,
     InvalidResponse,
-    TooManyGames,
+    TooManyItems,
 }
 
 impl From<ProtoError> for LibraryParseError {
@@ -28,9 +37,7 @@ impl From<ProtoError> for LibraryParseError {
 }
 
 pub fn parse_owned_games(response: &[u8]) -> Result<Vec<OwnedGame>, LibraryParseError> {
-    if response.len() > MAX_LIBRARY_RESPONSE_BYTES {
-        return Err(LibraryParseError::PayloadTooLarge);
-    }
+    ensure_payload_size(response)?;
     let fields = parse_all_ref(response)?;
     if fields.is_empty() {
         return Err(LibraryParseError::InvalidResponse);
@@ -47,8 +54,8 @@ pub fn parse_owned_games(response: &[u8]) -> Result<Vec<OwnedGame>, LibraryParse
         .iter()
         .filter(|field| field.number == 2 && field.as_bytes().is_some())
         .count();
-    if game_field_count > MAX_OWNED_GAMES {
-        return Err(LibraryParseError::TooManyGames);
+    if game_field_count > MAX_LIBRARY_ITEMS {
+        return Err(LibraryParseError::TooManyItems);
     }
     if declared_count.is_some_and(|count| count != game_field_count as i32) {
         return Err(LibraryParseError::InvalidResponse);
@@ -90,6 +97,66 @@ pub fn parse_owned_games(response: &[u8]) -> Result<Vec<OwnedGame>, LibraryParse
     Ok(games)
 }
 
+pub fn parse_achievement_progress(
+    response: &[u8],
+) -> Result<Vec<AchievementProgress>, LibraryParseError> {
+    ensure_payload_size(response)?;
+    let fields = parse_all_ref(response)?;
+    let item_count = fields
+        .iter()
+        .filter(|field| field.number == 1 && field.as_bytes().is_some())
+        .count();
+    if item_count > MAX_LIBRARY_ITEMS {
+        return Err(LibraryParseError::TooManyItems);
+    }
+
+    // Kotlin's Sequence<Pair>.toMap() keeps the first insertion position for a
+    // duplicate key but replaces its value with the last occurrence. Track the
+    // first vector index and update in place to keep exactly that behavior.
+    let mut progress = Vec::with_capacity(item_count);
+    let mut indices = HashMap::<i32, usize>::with_capacity(item_count);
+    for bytes in fields
+        .iter()
+        .filter(|field| field.number == 1)
+        .filter_map(ProtoFieldRef::as_bytes)
+    {
+        let Ok(item) = parse_all_ref(bytes) else {
+            continue;
+        };
+        let Some(app_id_field) = last_field(&item, 1) else {
+            continue;
+        };
+        let app_id = app_id_field.as_i64().unwrap_or(0) as i32;
+        if app_id <= 0 {
+            continue;
+        }
+        let unlocked = last_i64_or_zero(&item, 2).max(0) as i32;
+        let total = last_i64_or_zero(&item, 3).max(0) as i32;
+        let all_unlocked = last_i64_or_zero(&item, 5) != 0 || (total > 0 && unlocked >= total);
+        let parsed = AchievementProgress {
+            app_id,
+            unlocked,
+            total,
+            all_unlocked,
+        };
+        if let Some(index) = indices.get(&app_id).copied() {
+            progress[index] = parsed;
+        } else {
+            indices.insert(app_id, progress.len());
+            progress.push(parsed);
+        }
+    }
+    Ok(progress)
+}
+
+fn ensure_payload_size(response: &[u8]) -> Result<(), LibraryParseError> {
+    if response.len() > MAX_LIBRARY_RESPONSE_BYTES {
+        Err(LibraryParseError::PayloadTooLarge)
+    } else {
+        Ok(())
+    }
+}
+
 fn last_field<'a>(fields: &'a [ProtoFieldRef<'a>], number: u32) -> Option<&'a ProtoFieldRef<'a>> {
     fields.iter().rev().find(|field| field.number == number)
 }
@@ -127,6 +194,20 @@ mod tests {
         writer.write_varint(4, forever).unwrap();
         writer.write_string(5, icon).unwrap();
         writer.write_varint(11, last_played).unwrap();
+        writer
+    }
+
+    fn achievement_progress(
+        app_id: i64,
+        unlocked: i64,
+        total: i64,
+        all_unlocked: bool,
+    ) -> ProtoWriter {
+        let mut writer = ProtoWriter::new();
+        writer.write_varint(1, app_id).unwrap();
+        writer.write_varint(2, unlocked).unwrap();
+        writer.write_varint(3, total).unwrap();
+        writer.write_bool(5, all_unlocked).unwrap();
         writer
     }
 
@@ -207,10 +288,62 @@ mod tests {
     }
 
     #[test]
-    fn empty_response_is_invalid() {
+    fn empty_owned_games_response_is_invalid() {
         assert_eq!(
             parse_owned_games(&[]),
             Err(LibraryParseError::InvalidResponse)
         );
+    }
+
+    #[test]
+    fn achievement_progress_matches_kotlin_completion_rules() {
+        let mut response = ProtoWriter::new();
+        response
+            .write_message(1, &achievement_progress(730, 10, 10, false))
+            .unwrap();
+        response
+            .write_message(1, &achievement_progress(570, 5, 12, false))
+            .unwrap();
+        response
+            .write_message(1, &achievement_progress(440, 0, 0, true))
+            .unwrap();
+
+        let progress = parse_achievement_progress(response.as_bytes()).unwrap();
+        assert_eq!(progress.len(), 3);
+        assert!(progress[0].all_unlocked);
+        assert!(!progress[1].all_unlocked);
+        assert!(progress[2].all_unlocked);
+    }
+
+    #[test]
+    fn achievement_progress_duplicate_app_keeps_first_position_and_last_value() {
+        let mut response = ProtoWriter::new();
+        response
+            .write_message(1, &achievement_progress(730, 1, 10, false))
+            .unwrap();
+        response
+            .write_message(1, &achievement_progress(570, 2, 10, false))
+            .unwrap();
+        response
+            .write_message(1, &achievement_progress(730, 10, 10, true))
+            .unwrap();
+
+        let progress = parse_achievement_progress(response.as_bytes()).unwrap();
+        assert_eq!(progress.len(), 2);
+        assert_eq!(progress[0].app_id, 730);
+        assert_eq!(progress[0].unlocked, 10);
+        assert!(progress[0].all_unlocked);
+        assert_eq!(progress[1].app_id, 570);
+    }
+
+    #[test]
+    fn malformed_achievement_item_is_skipped() {
+        let valid = achievement_progress(730, 3, 10, false);
+        let mut response = ProtoWriter::new();
+        response.write_bytes(1, &[0x08, 0x80]).unwrap();
+        response.write_message(1, &valid).unwrap();
+        let progress = parse_achievement_progress(response.as_bytes()).unwrap();
+        assert_eq!(progress.len(), 1);
+        assert_eq!(progress[0].app_id, 730);
     }
 }

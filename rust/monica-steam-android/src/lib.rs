@@ -8,7 +8,9 @@ use monica_steam_core::{
         parse_chat_messages, parse_chat_sessions, ChatPage, ChatReactionKind, ChatSession,
     },
     cm::{decode_messages, encode_message, web_logon_body, CmEnvelope},
-    library::{parse_owned_games, OwnedGame},
+    library::{
+        parse_achievement_progress, parse_owned_games, AchievementProgress, OwnedGame,
+    },
     generate_auth_code, generate_confirmation_hash, generate_login_approval_signature,
     generate_login_token_signature,
 };
@@ -18,6 +20,7 @@ const CM_BRIDGE_MAGIC: &[u8; 4] = b"MSC1";
 const CHAT_SESSIONS_BRIDGE_MAGIC: &[u8; 4] = b"MSS1";
 const CHAT_MESSAGES_BRIDGE_MAGIC: &[u8; 4] = b"MSM1";
 const OWNED_GAMES_BRIDGE_MAGIC: &[u8; 4] = b"MSL1";
+const ACHIEVEMENT_PROGRESS_BRIDGE_MAGIC: &[u8; 4] = b"MSP1";
 const OPTIONAL_I32_NONE: i32 = i32::MIN;
 
 fn read_jstring(env: &mut JNIEnv<'_>, value: &JString<'_>) -> Option<String> {
@@ -143,6 +146,20 @@ fn serialize_owned_games(games: &[OwnedGame]) -> Option<Vec<u8>> {
         out.extend_from_slice(&game.last_played_at.to_le_bytes());
         write_required_string(&mut out, &game.name)?;
         write_required_string(&mut out, &game.icon_hash)?;
+    }
+    Some(out)
+}
+
+fn serialize_achievement_progress(progress: &[AchievementProgress]) -> Option<Vec<u8>> {
+    let count = u32::try_from(progress.len()).ok()?;
+    let mut out = Vec::with_capacity(8 + progress.len().saturating_mul(16));
+    out.extend_from_slice(ACHIEVEMENT_PROGRESS_BRIDGE_MAGIC);
+    out.extend_from_slice(&count.to_le_bytes());
+    for item in progress {
+        out.extend_from_slice(&item.app_id.to_le_bytes());
+        out.extend_from_slice(&item.unlocked.to_le_bytes());
+        out.extend_from_slice(&item.total.to_le_bytes());
+        out.extend_from_slice(&(if item.all_unlocked { 1i32 } else { 0i32 }).to_le_bytes());
     }
     Some(out)
 }
@@ -323,6 +340,24 @@ pub extern "system" fn Java_takagi_ru_monica_steam_core_RustSteamCoreNative_nati
         return ptr::null_mut();
     };
     let Some(encoded) = serialize_owned_games(&games) else {
+        return ptr::null_mut();
+    };
+    write_jbytes(&mut env, &encoded)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_takagi_ru_monica_steam_core_RustSteamCoreNative_nativeParseAchievementProgress(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    response: JByteArray<'_>,
+) -> jbyteArray {
+    let Ok(response) = env.convert_byte_array(&response) else {
+        return ptr::null_mut();
+    };
+    let Ok(progress) = parse_achievement_progress(&response) else {
+        return ptr::null_mut();
+    };
+    let Some(encoded) = serialize_achievement_progress(&progress) else {
         return ptr::null_mut();
     };
     write_jbytes(&mut env, &encoded)
