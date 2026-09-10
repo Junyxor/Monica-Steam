@@ -211,6 +211,108 @@ internal object RustSteamCoreNative {
         }.getOrNull()?.takeIf { it.isNotEmpty() }
     }
 
+    fun buildLoginBeginCredentialsOrNull(
+        deviceFriendlyName: String,
+        userName: String,
+        encryptedPassword: String,
+        encryptionTimestamp: String,
+        platformType: Long,
+        osType: Long,
+        gamingDeviceType: Long,
+        websiteId: String
+    ): ByteArray? {
+        if (!loaded) return null
+        return runCatching {
+            nativeBuildLoginBeginCredentials(
+                deviceFriendlyName,
+                userName,
+                encryptedPassword,
+                encryptionTimestamp,
+                platformType,
+                osType,
+                gamingDeviceType,
+                websiteId
+            )
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
+    fun parseLoginBeginCredentialsOrNull(response: ByteArray): ByteArray? {
+        if (!loaded || response.isEmpty()) return null
+        return runCatching { nativeParseLoginBeginCredentials(response) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    fun buildLoginBeginQrOrNull(
+        deviceFriendlyName: String,
+        platformType: Long,
+        osType: Long,
+        gamingDeviceType: Long,
+        websiteId: String
+    ): ByteArray? {
+        if (!loaded) return null
+        return runCatching {
+            nativeBuildLoginBeginQr(
+                deviceFriendlyName,
+                platformType,
+                osType,
+                gamingDeviceType,
+                websiteId
+            )
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
+    fun parseLoginBeginQrOrNull(response: ByteArray): ByteArray? {
+        if (!loaded || response.isEmpty()) return null
+        return runCatching { nativeParseLoginBeginQr(response) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    fun buildLoginUpdateGuardOrNull(
+        clientId: String,
+        steamId: String,
+        code: String,
+        confirmationType: Int
+    ): ByteArray? {
+        if (!loaded) return null
+        return runCatching {
+            nativeBuildLoginUpdateGuard(clientId, steamId, code, confirmationType)
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
+    fun buildLoginPollOrNull(
+        clientId: String,
+        requestId: String,
+        tokenToRevoke: String? = null
+    ): ByteArray? {
+        if (!loaded) return null
+        return runCatching {
+            nativeBuildLoginPoll(clientId, requestId, tokenToRevoke.orEmpty())
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
+    fun parseLoginPollOrNull(response: ByteArray): ByteArray? {
+        if (!loaded || response.isEmpty()) return null
+        return runCatching { nativeParseLoginPoll(response) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    fun buildLoginAccessTokenOrNull(refreshToken: String, steamId: String): ByteArray? {
+        if (!loaded) return null
+        return runCatching { nativeBuildLoginAccessToken(refreshToken, steamId) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    fun parseLoginAccessTokenOrNull(response: ByteArray): ByteArray? {
+        if (!loaded || response.isEmpty()) return null
+        return runCatching { nativeParseLoginAccessToken(response) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
     fun parseGroupChatHistoryOrNull(response: ByteArray): ByteArray? {
         if (!loaded || response.isEmpty()) return null
         return runCatching { nativeParseGroupChatHistory(response) }
@@ -263,6 +365,15 @@ internal object RustSteamCoreNative {
     @JvmStatic private external fun nativeParseTradeOffers(response: ByteArray): ByteArray
     @JvmStatic private external fun nativeParseWishlist(response: ByteArray): ByteArray
     @JvmStatic private external fun nativeParseMaFileJson(plainJson: String, fileName: String, displayNameOverride: String, steamIdOverride: String, allowMissingSteamId: Boolean): ByteArray
+    @JvmStatic private external fun nativeBuildLoginBeginCredentials(deviceFriendlyName: String, userName: String, encryptedPassword: String, encryptionTimestamp: String, platformType: Long, osType: Long, gamingDeviceType: Long, websiteId: String): ByteArray
+    @JvmStatic private external fun nativeParseLoginBeginCredentials(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeBuildLoginBeginQr(deviceFriendlyName: String, platformType: Long, osType: Long, gamingDeviceType: Long, websiteId: String): ByteArray
+    @JvmStatic private external fun nativeParseLoginBeginQr(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeBuildLoginUpdateGuard(clientId: String, steamId: String, code: String, confirmationType: Int): ByteArray
+    @JvmStatic private external fun nativeBuildLoginPoll(clientId: String, requestId: String, tokenToRevoke: String): ByteArray
+    @JvmStatic private external fun nativeParseLoginPoll(response: ByteArray): ByteArray
+    @JvmStatic private external fun nativeBuildLoginAccessToken(refreshToken: String, steamId: String): ByteArray
+    @JvmStatic private external fun nativeParseLoginAccessToken(response: ByteArray): ByteArray
     @JvmStatic private external fun nativeParseGroupChatHistory(response: ByteArray): ByteArray
     @JvmStatic private external fun nativeParseGroupChatSummaries(response: ByteArray): ByteArray
     @JvmStatic private external fun nativeWebLogonBody(webLogonToken: String): ByteArray
