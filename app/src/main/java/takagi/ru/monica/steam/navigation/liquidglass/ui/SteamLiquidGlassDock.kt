@@ -398,13 +398,20 @@ internal fun SteamLiquidGlassDock(
                                 dragScaleProgress(),
                                 motionState.pressProgress
                             )
-                            val indicatorTransform = resolveIndicatorTransform(
-                                scaleProgress = scaleProgress,
-                                velocityItemsPerSecond = motionState.deformationVelocityItemsPerSecond
+                            val baseScale = lerp(
+                                1f,
+                                INDICATOR_DRAG_SCALE_TARGET,
+                                scaleProgress.coerceIn(0f, 1f)
                             )
+                            val velocity = motionState.deformationVelocityItemsPerSecond /
+                                VELOCITY_NORMALIZATION_DIVISOR
+                            val velocityScaleX = (velocity * VELOCITY_SCALE_X_MULTIPLIER)
+                                .coerceIn(-VELOCITY_SCALE_CLAMP, VELOCITY_SCALE_CLAMP)
+                            val velocityScaleY = (velocity * VELOCITY_SCALE_Y_MULTIPLIER)
+                                .coerceIn(-VELOCITY_SCALE_CLAMP, VELOCITY_SCALE_CLAMP)
                             translationX = itemWidthPx * indicatorPosition + panelOffsetPx()
-                            scaleX = indicatorTransform.scaleX
-                            scaleY = indicatorTransform.scaleY
+                            scaleX = baseScale / (1f - velocityScaleX)
+                            scaleY = baseScale * (1f - velocityScaleY)
                         }
                         .then(
                             if (runtimeSupported) {
@@ -587,28 +594,6 @@ private fun RowScope.SteamLiquidGlassDockInputTarget(
                 role = Role.Tab,
                 onClick = onClick
             )
-    )
-}
-
-private data class IndicatorTransform(val scaleX: Float, val scaleY: Float)
-
-private fun resolveIndicatorTransform(
-    scaleProgress: Float,
-    velocityItemsPerSecond: Float
-): IndicatorTransform {
-    val baseScale = lerp(
-        1f,
-        INDICATOR_DRAG_SCALE_TARGET,
-        scaleProgress.coerceIn(0f, 1f)
-    )
-    val velocity = velocityItemsPerSecond / VELOCITY_NORMALIZATION_DIVISOR
-    val velocityScaleX = (velocity * VELOCITY_SCALE_X_MULTIPLIER)
-        .coerceIn(-VELOCITY_SCALE_CLAMP, VELOCITY_SCALE_CLAMP)
-    val velocityScaleY = (velocity * VELOCITY_SCALE_Y_MULTIPLIER)
-        .coerceIn(-VELOCITY_SCALE_CLAMP, VELOCITY_SCALE_CLAMP)
-    return IndicatorTransform(
-        scaleX = baseScale / (1f - velocityScaleX),
-        scaleY = baseScale * (1f - velocityScaleY)
     )
 }
 

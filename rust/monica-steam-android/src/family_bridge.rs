@@ -37,7 +37,7 @@ fn serialize_family_shared_apps(games: &[FamilySharedGame]) -> Option<Vec<u8>> {
 
 #[no_mangle]
 pub extern "system" fn Java_takagi_ru_monica_steam_core_RustSteamCoreNative_nativeParseFamilySharedApps(
-    mut env: JNIEnv<'_>,
+    env: JNIEnv<'_>,
     _class: JClass<'_>,
     response: JByteArray<'_>,
 ) -> jbyteArray {
