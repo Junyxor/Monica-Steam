@@ -427,7 +427,7 @@ class SteamGameLibraryService internal constructor(
                     steamId = steamId,
                     appIds = batch,
                     language = language,
-                    accessToken = accessToken
+                    accessToken = token
                 )
             }
             val fetched = result.getOrNull()
@@ -654,6 +654,7 @@ class SteamGameLibraryService internal constructor(
         internal fun parseAchievementProgress(
             response: ByteArray
         ): Map<Int, SteamGameAchievementProgress> {
+            RustAchievementProgressParser.parseOrNull(response)?.let { return it }
             return SteamProtoReader(response).parseAll()
                 .asSequence()
                 .filter { it.number == 1 && it.bytes != null }
