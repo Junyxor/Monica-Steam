@@ -716,6 +716,7 @@ class SteamGameLibraryService internal constructor(
             response: ByteArray,
             currency: String = "CNY"
         ): Map<Int, SteamStoreMetadata> {
+            RustStoreItemsParser.parseOrNull(response, currency)?.let { return it }
             val fetchedAt = System.currentTimeMillis()
             return SteamProtoReader(response).parseAll()
                 .asSequence()
