@@ -1,5 +1,6 @@
 package takagi.ru.monica.steam.token.data
 
+import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -82,6 +83,10 @@ class SteamLoginImportService(
         private const val AUTH_CODE_TYPE_EMAIL_CONFIRMATION = 5
         private const val LEGACY_OAUTH_CLIENT_ID = "DE45CD61"
         private const val LEGACY_OAUTH_SCOPE = "read_profile write_profile read_client write_client"
+        private val UNSIGNED_LONG_MAX = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE)
+        private val SIGNED_LONG_MAX = BigInteger.valueOf(Long.MAX_VALUE)
+        private val UNSIGNED_LONG_BASE = BigInteger.ONE.shiftLeft(64)
+
         private const val LEGACY_CODE_TYPE_TWO_FACTOR = 1001
         private const val LEGACY_CODE_TYPE_EMAIL = 1002
         private const val REPLACE_CODE_TYPE_GENERIC = 2001
@@ -309,7 +314,7 @@ class SteamLoginImportService(
                 "Steam account name, password, and authenticator secret are required"
             )
         }
-        val signedTokenId = tokenId.trim().toULongOrNull()?.toLong()
+        val signedTokenId = parseUnsigned64AsSignedLong(tokenId)
             ?: return@withContext AuthorizedDeviceRevokeResult.Failure(
                 "Steam authorized-device token is invalid"
             )
@@ -668,7 +673,11 @@ class SteamLoginImportService(
         data class Failure(val message: String) : SteamGuardSubmitResult()
     }
 
-
+    private data class AuthApiSessionIds(
+        val clientId: Long,
+        val requestId: ByteArray,
+        val steamId: Long?
+    )
 
     private data class BeginAuthSessionData(
         val clientId: String,
@@ -701,20 +710,31 @@ class SteamLoginImportService(
         encryptionTimestamp: String,
         throwApiErrors: Boolean = false
     ): BeginAuthSessionData? {
-        val request = SteamProtoWriter.fromEncoded(
-            SteamLoginAuthProtocol.buildBeginCredentialsRequest(
-                userName = userName,
-                encryptedPassword = encryptedPassword,
-                encryptionTimestamp = encryptionTimestamp
-            )
-        )
+        val timestamp = encryptionTimestamp.toLongOrNull()
+            ?: throw IllegalStateException("Steam returned an invalid RSA timestamp")
+        val request = SteamProtoWriter().apply {
+            writeString(1, DEVICE_FRIENDLY_NAME)
+            writeString(2, userName)
+            writeString(3, encryptedPassword)
+            writeUint64(4, timestamp)
+            writeBool(5, false)
+            writeVarint(6, SteamMobileAuthRequestProfile.platformType)
+            writeVarint(7, 1L)
+            writeString(8, STEAM_WEBSITE_ID)
+            writeMessage(9, buildAuthApiDeviceDetails())
+            writeString(10, "")
+            writeVarint(11, 0L)
+            writeVarint(12, 2L)
+        }
 
-        val response = try {
-            steamApi.callProtobuf(
-                iface = "IAuthenticationService",
-                method = "BeginAuthSessionViaCredentials",
-                request = request
-            )
+        val fields = try {
+            SteamProtoReader(
+                steamApi.callProtobuf(
+                    iface = "IAuthenticationService",
+                    method = "BeginAuthSessionViaCredentials",
+                    request = request
+                )
+            ).parseAll()
         } catch (error: SteamApiException) {
             safeLogWarning(
                 "BeginAuthSessionViaCredentials protobuf failed: " +
@@ -739,35 +759,52 @@ class SteamLoginImportService(
             throw error
         }
 
-        val parsed = SteamLoginAuthProtocol.parseBeginCredentialsResponse(response)
-        if (parsed == null) {
-            safeLogWarning("BeginAuthSessionViaCredentials protobuf returned an incomplete payload")
+        val clientId = fields.firstOrNull { it.number == 1 }
+            ?.asLong
+            ?.takeIf { it != 0L }
+            ?.let(::unsignedLongToString)
+        val requestId = fields.firstOrNull { it.number == 2 }
+            ?.bytes
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { java.util.Base64.getEncoder().encodeToString(it) }
+        val steamId = fields.firstOrNull { it.number == 5 }
+            ?.asLong
+            ?.takeIf { it != 0L }
+            ?.let(::unsignedLongToString)
+        if (clientId.isNullOrBlank() || requestId.isNullOrBlank() || steamId.isNullOrBlank()) {
+            safeLogWarning(
+                "BeginAuthSessionViaCredentials protobuf missing fields: fieldNumbers=${
+                    fields.joinToString(",") { it.number.toString() }
+                }"
+            )
             throw IllegalStateException("Steam returned an incomplete authentication response")
         }
+
         return BeginAuthSessionData(
-            clientId = parsed.clientId,
-            requestId = parsed.requestId,
-            steamId = parsed.steamId,
-            challenges = parsed.challenges.map { challenge ->
-                SteamGuardChallenge(
-                    confirmationType = challenge.confirmationType,
-                    associatedMessage = challenge.associatedMessage
-                )
-            },
-            message = parsed.message
+            clientId = clientId,
+            requestId = requestId,
+            steamId = steamId,
+            challenges = fields.authApiAllowedConfirmations(),
+            message = fields.firstOrNull { it.number == 8 }?.asString?.takeIf { it.isNotBlank() }
         )
     }
 
     private fun beginAuthSessionViaQrWithProtobuf(): BeginQrAuthSessionData? {
-        val request = SteamProtoWriter.fromEncoded(
-            SteamLoginAuthProtocol.buildBeginQrRequest()
-        )
-        val response = try {
-            steamApi.callProtobuf(
-                iface = "IAuthenticationService",
-                method = "BeginAuthSessionViaQR",
-                request = request
-            )
+        val request = SteamProtoWriter().apply {
+            writeString(1, DEVICE_FRIENDLY_NAME)
+            writeVarint(2, 3L)
+            writeMessage(3, buildAuthApiDeviceDetails())
+            writeString(4, STEAM_WEBSITE_ID)
+        }
+
+        val fields = try {
+            SteamProtoReader(
+                steamApi.callProtobuf(
+                    iface = "IAuthenticationService",
+                    method = "BeginAuthSessionViaQR",
+                    request = request
+                )
+            ).parseAll()
         } catch (error: SteamApiException) {
             android.util.Log.w(
                 TAG,
@@ -783,22 +820,64 @@ class SteamLoginImportService(
             return null
         }
 
-        val parsed = SteamLoginAuthProtocol.parseBeginQrResponse(response)
-        if (parsed == null) {
-            android.util.Log.w(TAG, "BeginAuthSessionViaQR protobuf returned an incomplete payload")
+        val clientId = fields.firstOrNull { it.number == 1 }
+            ?.asLong
+            ?.takeIf { it != 0L }
+            ?.let(::unsignedLongToString)
+        val challengeUrl = fields.firstOrNull { it.number == 2 }
+            ?.asString
+            ?.takeIf { it.isNotBlank() }
+        val requestId = fields.firstOrNull { it.number == 3 }
+            ?.bytes
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { Base64.encodeToString(it, Base64.NO_WRAP) }
+
+        if (clientId.isNullOrBlank() || challengeUrl.isNullOrBlank() || requestId.isNullOrBlank()) {
+            android.util.Log.w(
+                TAG,
+                "BeginAuthSessionViaQR protobuf missing fields: fieldNumbers=${
+                    fields.joinToString(",") { it.number.toString() }
+                }"
+            )
             return null
         }
+
         return BeginQrAuthSessionData(
-            clientId = parsed.clientId,
-            requestId = parsed.requestId,
-            challengeUrl = parsed.challengeUrl,
-            challenges = parsed.challenges.map { challenge ->
-                SteamGuardChallenge(
-                    confirmationType = challenge.confirmationType,
-                    associatedMessage = challenge.associatedMessage
-                )
-            }
+            clientId = clientId,
+            requestId = requestId,
+            challengeUrl = challengeUrl,
+            challenges = fields.authApiAllowedConfirmations(confirmationField = 5)
         )
+    }
+
+    private fun buildAuthApiDeviceDetails(): SteamProtoWriter {
+        return SteamProtoWriter().apply {
+            writeString(1, DEVICE_FRIENDLY_NAME)
+            writeVarint(2, SteamMobileAuthRequestProfile.platformType)
+            writeVarint(3, SteamMobileAuthRequestProfile.osType)
+            writeVarint(4, SteamMobileAuthRequestProfile.gamingDeviceType)
+        }
+    }
+
+    private fun List<takagi.ru.monica.steam.network.SteamProtoField>.authApiAllowedConfirmations():
+        List<SteamGuardChallenge> {
+        return authApiAllowedConfirmations(confirmationField = 4)
+    }
+
+    private fun List<takagi.ru.monica.steam.network.SteamProtoField>.authApiAllowedConfirmations(
+        confirmationField: Int
+    ): List<SteamGuardChallenge> {
+        return filter { it.number == confirmationField && it.bytes != null }.mapNotNull { field ->
+            val confirmation = runCatching {
+                SteamProtoReader(field.bytes ?: return@mapNotNull null).parse()
+            }.getOrNull() ?: return@mapNotNull null
+            val type = confirmation[1]?.asInt ?: return@mapNotNull null
+            if (type == 0) return@mapNotNull null
+            SteamGuardChallenge(
+                confirmationType = type,
+                associatedMessage = confirmation[2]?.asString.orEmpty()
+            )
+        }
     }
 
     private fun submitSteamGuardCodeWithProtobuf(
@@ -806,13 +885,16 @@ class SteamLoginImportService(
         code: String,
         confirmationType: Int
     ): SteamGuardSubmitResult {
-        val requestBytes = SteamLoginAuthProtocol.buildUpdateGuardRequest(
-            clientId = session.clientId,
-            steamId = session.steamId,
-            code = code,
-            confirmationType = confirmationType
-        ) ?: return SteamGuardSubmitResult.UnsupportedSession
-        val request = SteamProtoWriter.fromEncoded(requestBytes)
+        val clientIdLong = parseUnsigned64AsSignedLong(session.clientId)
+            ?: return SteamGuardSubmitResult.UnsupportedSession
+        val steamIdLong = session.steamId.toLongOrNull()
+            ?: return SteamGuardSubmitResult.UnsupportedSession
+        val request = SteamProtoWriter().apply {
+            writeUint64(1, clientIdLong)
+            writeFixed64(2, steamIdLong)
+            writeString(3, code.trim())
+            writeVarint(4, confirmationType.toLong())
+        }
 
         return try {
             steamApi.callProtobuf(
@@ -933,15 +1015,9 @@ class SteamLoginImportService(
         pendingResult: LoginResult? = null,
         purpose: LoginPurpose = LoginPurpose.IMPORT_AUTHENTICATOR
     ): LoginResult {
-        if (clientId.trim().toULongOrNull() != null && requestId.isNotBlank()) {
-            return pollForTokenWithProtobuf(
-                clientId = clientId,
-                requestId = requestId,
-                steamId = steamId,
-                maxAttempts = maxAttempts,
-                pendingResult = pendingResult,
-                purpose = purpose
-            )
+        val authIds = buildAuthApiSessionIds(clientId, requestId, steamId)
+        if (authIds != null) {
+            return pollForTokenWithProtobuf(authIds, steamId, maxAttempts, pendingResult, purpose)
         }
         return pollForTokenWithForm(clientId, requestId, steamId, maxAttempts, pendingResult, purpose)
     }
@@ -950,22 +1026,28 @@ class SteamLoginImportService(
         session: PendingAuthSession,
         tokenToRevoke: Long
     ): TemporaryAuthTokens? {
-        var clientId = session.clientId
+        val authIds = buildAuthApiSessionIds(
+            session.clientId,
+            session.requestId,
+            session.steamId
+        ) ?: return null
+        var clientId = authIds.clientId
         repeat(MAX_POLL_ATTEMPTS) { attempt ->
-            val requestBytes = SteamLoginAuthProtocol.buildPollRequest(
-                clientId = clientId,
-                requestId = session.requestId,
-                tokenToRevoke = tokenToRevoke.toULong().toString()
-            ) ?: return null
-            val response = steamApi.callProtobuf(
-                iface = "IAuthenticationService",
-                method = "PollAuthSessionStatus",
-                request = SteamProtoWriter.fromEncoded(requestBytes)
-            )
-            val parsed = SteamLoginAuthProtocol.parsePollResponse(response) ?: return null
-            parsed.clientId?.takeIf { it.isNotBlank() }?.let { clientId = it }
-            val refreshToken = parsed.refreshToken
-            val accessToken = parsed.accessToken
+            val request = SteamProtoWriter().apply {
+                writeUint64(1, clientId)
+                writeBytes(2, authIds.requestId)
+                writeFixed64(3, tokenToRevoke)
+            }
+            val fields = SteamProtoReader(
+                steamApi.callProtobuf(
+                    iface = "IAuthenticationService",
+                    method = "PollAuthSessionStatus",
+                    request = request
+                )
+            ).parse()
+            fields[1]?.asLong?.takeIf { it != 0L }?.let { clientId = it }
+            val refreshToken = fields[3]?.asString
+            val accessToken = fields[4]?.asString
             if (!accessToken.isNullOrBlank() && !refreshToken.isNullOrBlank()) {
                 return TemporaryAuthTokens(
                     accessToken = accessToken,
@@ -978,27 +1060,26 @@ class SteamLoginImportService(
     }
 
     private suspend fun pollForTokenWithProtobuf(
-        clientId: String,
-        requestId: String,
+        authIds: AuthApiSessionIds,
         steamId: String,
         maxAttempts: Int,
         pendingResult: LoginResult?,
         purpose: LoginPurpose
     ): LoginResult {
-        var currentClientId = clientId
+        var clientId = authIds.clientId
         repeat(maxAttempts) { attempt ->
-            val requestBytes = SteamLoginAuthProtocol.buildPollRequest(
-                clientId = currentClientId,
-                requestId = requestId
-            ) ?: return LoginResult.Failure("Steam 登录会话参数无效")
-            val parsed = try {
-                val response = steamApi.callProtobuf(
-                    iface = "IAuthenticationService",
-                    method = "PollAuthSessionStatus",
-                    request = SteamProtoWriter.fromEncoded(requestBytes)
-                )
-                SteamLoginAuthProtocol.parsePollResponse(response)
-                    ?: return LoginResult.Failure("Steam 登录轮询响应无效")
+            val request = SteamProtoWriter().apply {
+                writeUint64(1, clientId)
+                writeBytes(2, authIds.requestId)
+            }
+            val fields = try {
+                SteamProtoReader(
+                    steamApi.callProtobuf(
+                        iface = "IAuthenticationService",
+                        method = "PollAuthSessionStatus",
+                        request = request
+                    )
+                ).parse()
             } catch (error: SteamApiException) {
                 return LoginResult.Failure(
                     mapEresultToMessage(error.eResult)
@@ -1010,16 +1091,16 @@ class SteamLoginImportService(
                 return LoginResult.Failure(error.message ?: "Steam 登录轮询失败")
             }
 
-            parsed.clientId?.takeIf { it.isNotBlank() }?.let { currentClientId = it }
-            val accessToken = parsed.accessToken
-            val refreshToken = parsed.refreshToken
+            fields[1]?.asLong?.takeIf { it != 0L }?.let { clientId = it }
+            val accessToken = fields[4]?.asString
+            val refreshToken = fields[3]?.asString
             val resolvedSteamId = resolveSteamIdFromLoginTokens(steamId, accessToken, refreshToken)
             if (!accessToken.isNullOrBlank()) {
                 logDiag("poll protobuf tokens access=true refresh=${!refreshToken.isNullOrBlank()}")
                 if (resolvedSteamId.isNullOrBlank()) {
                     return LoginResult.Failure("Steam 登录成功但无法识别 SteamID，无法继续导入")
                 }
-                val accountName = parsed.accountName ?: resolvedSteamId
+                val accountName = fields[6]?.asString?.takeIf { it.isNotBlank() } ?: resolvedSteamId
                 return resolveLoginPayloadAfterToken(
                     steamId = resolvedSteamId,
                     userName = accountName,
@@ -1037,7 +1118,7 @@ class SteamLoginImportService(
                     steamId = resolvedSteamId,
                     refreshToken = refreshToken
                 ) ?: return LoginResult.Failure("Steam 登录成功但无法换取 access token，无法继续导入")
-                val accountName = parsed.accountName ?: resolvedSteamId
+                val accountName = fields[6]?.asString?.takeIf { it.isNotBlank() } ?: resolvedSteamId
                 return resolveLoginPayloadAfterToken(
                     steamId = resolvedSteamId,
                     userName = accountName,
@@ -1047,7 +1128,9 @@ class SteamLoginImportService(
                 )
             }
 
-            if (attempt < maxAttempts - 1) delay(POLL_INTERVAL_MS)
+            if (attempt < maxAttempts - 1) {
+                delay(POLL_INTERVAL_MS)
+            }
         }
 
         return pendingResult ?: LoginResult.Failure("Steam 登录等待超时，请稍后重试")
@@ -1057,18 +1140,20 @@ class SteamLoginImportService(
         pendingSessionId: String,
         session: PendingAuthSession
     ): QrLoginResult {
-        val requestBytes = SteamLoginAuthProtocol.buildPollRequest(
-            clientId = session.clientId,
-            requestId = session.requestId
-        ) ?: return QrLoginResult.Failure("二维码登录会话参数无效，请重新开始")
-        val parsed = try {
-            val response = steamApi.callProtobuf(
-                iface = "IAuthenticationService",
-                method = "PollAuthSessionStatus",
-                request = SteamProtoWriter.fromEncoded(requestBytes)
-            )
-            SteamLoginAuthProtocol.parsePollResponse(response)
-                ?: return QrLoginResult.Failure("Steam 二维码登录轮询响应无效")
+        val authIds = buildAuthApiSessionIds(session.clientId, session.requestId, session.steamId)
+            ?: return QrLoginResult.Failure("二维码登录会话参数无效，请重新开始")
+        val request = SteamProtoWriter().apply {
+            writeUint64(1, authIds.clientId)
+            writeBytes(2, authIds.requestId)
+        }
+        val fields = try {
+            SteamProtoReader(
+                steamApi.callProtobuf(
+                    iface = "IAuthenticationService",
+                    method = "PollAuthSessionStatus",
+                    request = request
+                )
+            ).parse()
         } catch (error: SteamApiException) {
             return QrLoginResult.Failure(
                 mapEresultToMessage(error.eResult)
@@ -1080,12 +1165,15 @@ class SteamLoginImportService(
             return QrLoginResult.Failure(error.message ?: "Steam 二维码登录轮询失败")
         }
 
+        val nextClientId = fields[1]?.asLong?.takeIf { it != 0L }
+        val nextChallengeUrl = fields[2]?.asString?.takeIf { it.isNotBlank() }
+        val accessToken = fields[4]?.asString
+        val refreshToken = fields[3]?.asString
         val currentSession = session.copy(
-            clientId = parsed.clientId ?: session.clientId,
-            qrChallengeUrl = parsed.challengeUrl ?: session.qrChallengeUrl
+            clientId = nextClientId?.let(::unsignedLongToString) ?: session.clientId,
+            qrChallengeUrl = nextChallengeUrl ?: session.qrChallengeUrl
         )
-        val accessToken = parsed.accessToken
-        val refreshToken = parsed.refreshToken
+
         if (!accessToken.isNullOrBlank() || !refreshToken.isNullOrBlank()) {
             val resolvedSteamId = resolveSteamIdFromLoginTokens(
                 currentSession.steamId,
@@ -1106,7 +1194,7 @@ class SteamLoginImportService(
             } else {
                 requireNotNull(refreshedTokens).refreshToken ?: refreshToken
             }
-            val accountName = parsed.accountName ?: resolvedSteamId
+            val accountName = fields[6]?.asString?.takeIf { it.isNotBlank() } ?: resolvedSteamId
             pendingSessions.remove(pendingSessionId)
             return when (
                 val loginResult = resolveLoginPayloadAfterToken(
@@ -1198,28 +1286,31 @@ class SteamLoginImportService(
         steamId: String,
         refreshToken: String
     ): AccessTokenRefreshResult? {
-        val requestBytes = SteamLoginAuthProtocol.buildGenerateAccessTokenRequest(
-            refreshToken = refreshToken,
-            steamId = steamId
-        ) ?: run {
+        val steamIdLong = steamId.toLongOrNull()
+        if (steamIdLong == null) {
             logDiag("generate access token skipped steamid_invalid")
             return null
         }
+        val request = SteamProtoWriter().apply {
+            writeString(1, refreshToken)
+            writeFixed64(2, steamIdLong)
+        }
 
         return try {
-            val response = steamApi.callProtobuf(
-                iface = "IAuthenticationService",
-                method = "GenerateAccessTokenForApp",
-                request = SteamProtoWriter.fromEncoded(requestBytes)
-            )
-            val parsed = SteamLoginAuthProtocol.parseGenerateAccessTokenResponse(response)
-            val accessToken = parsed?.accessToken
-            val newRefreshToken = parsed?.refreshToken
+            val fields = SteamProtoReader(
+                steamApi.callProtobuf(
+                    iface = "IAuthenticationService",
+                    method = "GenerateAccessTokenForApp",
+                    request = request
+                )
+            ).parse()
+            val accessToken = fields[1]?.asString
+            val newRefreshToken = fields[2]?.asString
             val success = !accessToken.isNullOrBlank()
             logDiag("generate access token result success=$success refresh_rotated=${!newRefreshToken.isNullOrBlank()}")
             if (success) {
                 AccessTokenRefreshResult(
-                    accessToken = requireNotNull(accessToken),
+                    accessToken = accessToken,
                     refreshToken = newRefreshToken
                 )
             } else {
@@ -1300,7 +1391,62 @@ class SteamLoginImportService(
         )
     }
 
+    private fun buildAuthApiSessionIds(
+        clientId: String,
+        requestId: String,
+        steamId: String
+    ): AuthApiSessionIds? {
+        return AuthApiSessionIds(
+            clientId = parseUnsigned64AsSignedLong(clientId) ?: return null,
+            requestId = decodeAuthApiRequestIdBytes(requestId) ?: return null,
+            steamId = steamId.toLongOrNull()
+        )
+    }
 
+    private fun parseUnsigned64AsSignedLong(value: String): Long? {
+        val big = runCatching { BigInteger(value.trim()) }.getOrNull() ?: return null
+        if (big < BigInteger.ZERO || big > UNSIGNED_LONG_MAX) return null
+        return if (big > SIGNED_LONG_MAX) {
+            big.subtract(UNSIGNED_LONG_BASE).longValueExact()
+        } else {
+            big.longValueExact()
+        }
+    }
+
+    private fun unsignedLongToString(value: Long): String {
+        return if (value >= 0) {
+            value.toString()
+        } else {
+            BigInteger.valueOf(value).add(UNSIGNED_LONG_BASE).toString()
+        }
+    }
+
+    private fun decodeAuthApiRequestIdBytes(value: String): ByteArray? {
+        val trimmed = value.trim()
+        if (trimmed.isBlank()) return null
+        val decoded = listOf(
+            Base64.NO_WRAP,
+            Base64.DEFAULT,
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING,
+            Base64.URL_SAFE or Base64.DEFAULT
+        ).firstNotNullOfOrNull { flags ->
+            runCatching { Base64.decode(trimmed, flags) }
+                .getOrNull()
+                ?.takeIf { it.isNotEmpty() }
+        }
+        if (decoded != null) return decoded
+        return decodeHexBytes(trimmed) ?: trimmed.toByteArray(Charsets.UTF_8)
+    }
+
+    private fun decodeHexBytes(value: String): ByteArray? {
+        if (value.length % 2 != 0 || value.any { !it.isDigit() && it.lowercaseChar() !in 'a'..'f' }) {
+            return null
+        }
+        return value.chunked(2)
+            .map { it.toInt(16).toByte() }
+            .toByteArray()
+            .takeIf { it.isNotEmpty() }
+    }
 
     private sealed class AddAuthenticatorStartResult {
         data class AwaitingFinalization(
@@ -1479,21 +1625,28 @@ class SteamLoginImportService(
         accountName: String,
         accessToken: String
     ): AddAuthenticatorStartResult {
+        val steamIdLong = steamId.toLongOrNull()
+            ?: return AddAuthenticatorStartResult.Failure("SteamID 无效，无法添加 Steam Guard")
         val deviceId = generateSteamDeviceId()
         val authTime = System.currentTimeMillis() / 1000L
-        val requestBytes = SteamTwoFactorProtocol.buildAddAuthenticatorRequest(
-            steamId = steamId,
-            authTime = authTime,
-            deviceId = deviceId
-        ) ?: return AddAuthenticatorStartResult.Failure("SteamID 无效，无法添加 Steam Guard")
+        val request = SteamProtoWriter().apply {
+            writeFixed64(1, steamIdLong)
+            writeUint64(2, authTime)
+            writeVarint(4, 1L)
+            writeString(5, deviceId)
+            writeString(6, "1")
+            writeVarint(8, 2L)
+        }
 
-        val response = try {
-            steamApi.callProtobuf(
-                iface = "ITwoFactorService",
-                method = "AddAuthenticator",
-                request = SteamProtoWriter.fromEncoded(requestBytes),
-                accessToken = accessToken
-            )
+        val fields = try {
+            SteamProtoReader(
+                steamApi.callProtobuf(
+                    iface = "ITwoFactorService",
+                    method = "AddAuthenticator",
+                    request = request,
+                    accessToken = accessToken
+                )
+            ).parse()
         } catch (error: SteamApiException) {
             logDiag("add authenticator failed eResult=${error.eResult ?: "unknown"}")
             return when (error.eResult) {
@@ -1509,17 +1662,15 @@ class SteamLoginImportService(
             android.util.Log.e(TAG, "beginAddAuthenticator failed: ${error.message}", error)
             return AddAuthenticatorStartResult.Failure(error.message ?: "添加 Steam Guard 失败")
         }
-        val parsed = SteamTwoFactorProtocol.parseAddAuthenticatorResponse(response)
-            ?: return AddAuthenticatorStartResult.Failure("Steam 未返回可解析的令牌数据")
 
-        val status = parsed.status
-        logDiag("add authenticator response status=$status")
+        val status = fields[10]?.asInt ?: 0
+        logDiag("add authenticator response status=$status fields=${fields.keys.sorted().joinToString(",")}")
         if (status == 29) {
             return AddAuthenticatorStartResult.AuthenticatorPresent
         }
 
-        val sharedSecret = parsed.sharedSecret
-        if (status == 2 || sharedSecret.isNullOrBlank()) {
+        val sharedSecretBytes = fields[1]?.bytes
+        if (status == 2 || sharedSecretBytes == null || sharedSecretBytes.isEmpty()) {
             val message = if (status == 2) {
                 "该 Steam 账号需要先绑定手机号，才能添加 Steam Guard"
             } else {
@@ -1529,28 +1680,35 @@ class SteamLoginImportService(
             return AddAuthenticatorStartResult.Failure(message)
         }
 
-        val serialNumber = parsed.serialNumber
+        val sharedSecret = Base64.encodeToString(sharedSecretBytes, Base64.NO_WRAP)
+        val serialNumber = fields[2]?.asFixed64UnsignedString?.takeIf { it != "0" }
         if (serialNumber.isNullOrBlank()) {
-            android.util.Log.w(TAG, "AddAuthenticator missing serial_number")
-            logDiag("add authenticator missing serial_number")
+            android.util.Log.w(TAG, "AddAuthenticator missing serial_number, fields=${fields.keys}")
+            logDiag("add authenticator missing serial_number fields=${fields.keys.sorted().joinToString(",")}")
             return AddAuthenticatorStartResult.Failure("Steam 未返回完整令牌数据（缺少 serial_number）")
         }
 
-        val confirmType = parsed.confirmType
-        val phoneHint = parsed.phoneHint
-        val resolvedAccountName = parsed.accountName
+        val confirmType = fields[12]?.asInt ?: 0
+        val phoneHint = fields[11]?.asString.orEmpty()
+        val resolvedAccountName = fields[6]?.asString
+            ?.takeIf { it.isNotBlank() }
             ?: accountName.takeIf { it.isNotBlank() && it != steamId }
         val canonicalPayload = buildJsonObject {
             put("steamid", JsonPrimitive(steamId))
             put("shared_secret", JsonPrimitive(sharedSecret))
             put("serial_number", JsonPrimitive(serialNumber))
-            parsed.revocationCode?.let { put("revocation_code", JsonPrimitive(it)) }
-            parsed.uri?.let { put("uri", JsonPrimitive(it)) }
-            put("server_time", JsonPrimitive((parsed.serverTime ?: authTime).toString()))
+            fields[3]?.asString?.takeIf { it.isNotBlank() }
+                ?.let { put("revocation_code", JsonPrimitive(it)) }
+            fields[4]?.asString?.takeIf { it.isNotBlank() }
+                ?.let { put("uri", JsonPrimitive(it)) }
+            put("server_time", JsonPrimitive((fields[5]?.asLong ?: authTime).toString()))
             resolvedAccountName?.let { put("account_name", JsonPrimitive(it)) }
-            parsed.tokenGid?.let { put("token_gid", JsonPrimitive(it)) }
-            parsed.identitySecret?.let { put("identity_secret", JsonPrimitive(it)) }
-            parsed.secret1?.let { put("secret_1", JsonPrimitive(it)) }
+            fields[7]?.asString?.takeIf { it.isNotBlank() }
+                ?.let { put("token_gid", JsonPrimitive(it)) }
+            fields[8]?.bytes?.takeIf { it.isNotEmpty() }
+                ?.let { put("identity_secret", JsonPrimitive(Base64.encodeToString(it, Base64.NO_WRAP))) }
+            fields[9]?.bytes?.takeIf { it.isNotEmpty() }
+                ?.let { put("secret_1", JsonPrimitive(Base64.encodeToString(it, Base64.NO_WRAP))) }
             put("status", JsonPrimitive(status.toString()))
             put("device_id", JsonPrimitive(deviceId))
             put("fully_enrolled", JsonPrimitive(false))
@@ -1581,9 +1739,8 @@ class SteamLoginImportService(
             ?: return LoginResult.Failure("Steam Guard 激活会话已过期，请重新登录", retryable = false)
         val payload = session.addPayload
             ?: return LoginResult.Failure("Steam Guard 激活数据已过期，请重新登录", retryable = false)
-        if (session.steamId.toLongOrNull() == null) {
-            return LoginResult.Failure("SteamID 无效，无法完成 Steam Guard 绑定", retryable = false)
-        }
+        val steamIdLong = session.steamId.toLongOrNull()
+            ?: return LoginResult.Failure("SteamID 无效，无法完成 Steam Guard 绑定", retryable = false)
         val sharedSecret = payload.sharedSecretOrNull()
             ?: return LoginResult.Failure("Steam Guard 数据不完整，无法生成激活验证码", retryable = false)
 
@@ -1591,23 +1748,23 @@ class SteamLoginImportService(
         repeat(31) { attempt ->
             val authTime = System.currentTimeMillis() / 1000L
             val authenticatorCode = SteamTotp.generateAuthCode(sharedSecret, authTime)
-            val requestBytes = SteamTwoFactorProtocol.buildFinalizeAuthenticatorRequest(
-                steamId = session.steamId,
-                authenticatorCode = authenticatorCode,
-                authTime = authTime,
-                activationCode = activationCode,
-                validateSmsCode = session.addValidateSmsCode
-            ) ?: return LoginResult.Failure("SteamID 无效，无法完成 Steam Guard 绑定", retryable = false)
+            val request = SteamProtoWriter().apply {
+                writeFixed64(1, steamIdLong)
+                writeString(2, authenticatorCode)
+                writeUint64(3, authTime)
+                writeString(4, activationCode)
+                writeBool(6, session.addValidateSmsCode)
+            }
 
-            val parsed = try {
-                val response = steamApi.callProtobuf(
-                    iface = "ITwoFactorService",
-                    method = "FinalizeAddAuthenticator",
-                    request = SteamProtoWriter.fromEncoded(requestBytes),
-                    accessToken = accessToken
-                )
-                SteamTwoFactorProtocol.parseFinalizeAuthenticatorResponse(response)
-                    ?: return LoginResult.Failure("Steam Guard 激活响应无效")
+            val fields = try {
+                SteamProtoReader(
+                    steamApi.callProtobuf(
+                        iface = "ITwoFactorService",
+                        method = "FinalizeAddAuthenticator",
+                        request = request,
+                        accessToken = accessToken
+                    )
+                ).parse()
             } catch (error: SteamApiException) {
                 logDiag("finalize add authenticator failed eResult=${error.eResult ?: "unknown"}")
                 return LoginResult.Failure(
@@ -1621,9 +1778,9 @@ class SteamLoginImportService(
                 return LoginResult.Failure(error.message ?: "Steam Guard 激活失败")
             }
 
-            val success = parsed.success
-            val wantMore = parsed.wantMore
-            val status = parsed.status
+            val success = fields[1]?.asBool ?: false
+            val wantMore = fields[2]?.asBool ?: false
+            val status = fields[4]?.asInt ?: 0
             logDiag("finalize add authenticator response success=$success wantMore=$wantMore status=$status attempt=$attempt")
             if (status == 89) {
                 return LoginResult.Failure("Steam 激活码无效或已过期")
@@ -1768,16 +1925,20 @@ class SteamLoginImportService(
         accessToken: String,
         code: String
     ): Result<SteamGuardPayload> {
-        val request = SteamProtoWriter.fromEncoded(
-            SteamTwoFactorProtocol.buildReplaceContinueRequest(code)
-        )
-        val response = try {
-            steamApi.callProtobuf(
-                iface = "ITwoFactorService",
-                method = "RemoveAuthenticatorViaChallengeContinue",
-                request = request,
-                accessToken = accessToken
-            )
+        val request = SteamProtoWriter().apply {
+            writeString(1, code.trim())
+            writeBool(2, true)
+            writeVarint(3, 2L)
+        }
+        val fields = try {
+            SteamProtoReader(
+                steamApi.callProtobuf(
+                    iface = "ITwoFactorService",
+                    method = "RemoveAuthenticatorViaChallengeContinue",
+                    request = request,
+                    accessToken = accessToken
+                )
+            ).parse()
         } catch (error: SteamApiException) {
             logDiag("replace continue failed eResult=${error.eResult ?: "unknown"}")
             return Result.failure(
@@ -1793,12 +1954,21 @@ class SteamLoginImportService(
             return Result.failure(Exception(error.message ?: "替换令牌失败"))
         }
 
-        val replacement = SteamTwoFactorProtocol.parseReplaceContinueResponse(response)
-        val sharedSecret = replacement?.sharedSecret
-        val serialNumber = replacement?.serialNumber
+        val replacementFields = fields[2]?.bytes?.let { bytes ->
+            runCatching { SteamProtoReader(bytes).parse() }.getOrNull()
+        }
+        val sharedSecretBytes = replacementFields?.get(1)?.bytes
+        val sharedSecret = sharedSecretBytes
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { Base64.encodeToString(it, Base64.NO_WRAP) }
+        val serialNumber = replacementFields?.get(2)?.asFixed64UnsignedString?.takeIf { it != "0" }
         if (sharedSecret.isNullOrBlank() || serialNumber.isNullOrBlank()) {
-            android.util.Log.w(TAG, "continueReplaceAuthenticatorChallenge missing token fields")
-            logDiag("replace continue missing token fields")
+            val replacementKeys = replacementFields?.keys?.joinToString(",").orEmpty()
+            android.util.Log.w(
+                TAG,
+                "continueReplaceAuthenticatorChallenge missing token fields, replacementKeys=[$replacementKeys]"
+            )
+            logDiag("replace continue missing token fields replacementKeys=[$replacementKeys]")
             return Result.failure(
                 Exception("替换成功但未返回完整令牌数据（缺少 shared_secret/serial_number）")
             )
@@ -1808,23 +1978,30 @@ class SteamLoginImportService(
         val canonicalPayload = buildJsonObject {
             put("shared_secret", JsonPrimitive(sharedSecret))
             put("serial_number", JsonPrimitive(serialNumber))
-            replacement.revocationCode?.let { put("revocation_code", JsonPrimitive(it)) }
-            replacement.uri?.let { put("uri", JsonPrimitive(it)) }
-            replacement.serverTime?.takeIf { it != 0L }
+            replacementFields?.get(3)?.asString?.takeIf { it.isNotBlank() }
+                ?.let { put("revocation_code", JsonPrimitive(it)) }
+            replacementFields?.get(4)?.asString?.takeIf { it.isNotBlank() }
+                ?.let { put("uri", JsonPrimitive(it)) }
+            replacementFields?.get(5)?.asLong?.takeIf { it != 0L }
                 ?.let { put("server_time", JsonPrimitive(it.toString())) }
-            replacement.accountName?.let { put("account_name", JsonPrimitive(it)) }
-            replacement.tokenGid?.let { put("token_gid", JsonPrimitive(it)) }
-            replacement.identitySecret?.let { put("identity_secret", JsonPrimitive(it)) }
-            replacement.secret1?.let { put("secret_1", JsonPrimitive(it)) }
-            replacement.status.takeIf { it != 0 }
+            replacementFields?.get(6)?.asString?.takeIf { it.isNotBlank() }
+                ?.let { put("account_name", JsonPrimitive(it)) }
+            replacementFields?.get(7)?.asString?.takeIf { it.isNotBlank() }
+                ?.let { put("token_gid", JsonPrimitive(it)) }
+            replacementFields?.get(8)?.bytes?.takeIf { it.isNotEmpty() }
+                ?.let { put("identity_secret", JsonPrimitive(Base64.encodeToString(it, Base64.NO_WRAP))) }
+            replacementFields?.get(9)?.bytes?.takeIf { it.isNotEmpty() }
+                ?.let { put("secret_1", JsonPrimitive(Base64.encodeToString(it, Base64.NO_WRAP))) }
+            replacementFields?.get(10)?.asInt?.takeIf { it != 0 }
                 ?.let { put("status", JsonPrimitive(it.toString())) }
-            replacement.steamGuardScheme?.takeIf { it != 0 }
+            replacementFields?.get(11)?.asInt?.takeIf { it != 0 }
                 ?.let { put("steamguard_scheme", JsonPrimitive(it.toString())) }
-            replacement.steamId?.let { put("steamid", JsonPrimitive(it)) }
+            replacementFields?.get(12)?.asFixed64UnsignedString?.takeIf { it != "0" }
+                ?.let { put("steamid", JsonPrimitive(it)) }
             put("device_id", JsonPrimitive(resolvedDeviceId))
             put("fully_enrolled", JsonPrimitive(true))
         }
-        logDiag("replace continue success transport=protobuf status=${replacement.status}")
+        logDiag("replace continue success transport=protobuf fields=${replacementFields?.keys?.sorted()?.joinToString(",").orEmpty()}")
         return Result.success(
             SteamGuardPayload(
                 deviceId = resolvedDeviceId,

@@ -11,18 +11,9 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.android.awaitFrame
-import kotlinx.coroutines.launch
 import takagi.ru.monica.steam.navigation.SteamDockTab
 import takagi.ru.monica.steam.navigation.icon
 import takagi.ru.monica.steam.navigation.label
@@ -35,27 +26,6 @@ internal fun SteamAdaptiveNavigationRail(
     onSelected: (SteamDockTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val scope = rememberCoroutineScope()
-    val currentOnSelected by rememberUpdatedState(onSelected)
-    val selectionGeneration = remember { intArrayOf(0) }
-    var optimisticSelected by remember { mutableStateOf(selected) }
-
-    LaunchedEffect(selected) {
-        optimisticSelected = selected
-    }
-
-    fun selectAfterVisualCommit(tab: SteamDockTab) {
-        if (tab == optimisticSelected) return
-        optimisticSelected = tab
-        val generation = ++selectionGeneration[0]
-        scope.launch {
-            awaitFrame()
-            if (selectionGeneration[0] == generation) {
-                currentOnSelected(tab)
-            }
-        }
-    }
-
     NavigationRail(
         modifier = modifier.fillMaxHeight(),
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
@@ -69,8 +39,8 @@ internal fun SteamAdaptiveNavigationRail(
             order.forEach { tab ->
                 val label = tab.label()
                 NavigationRailItem(
-                    selected = optimisticSelected == tab,
-                    onClick = { selectAfterVisualCommit(tab) },
+                    selected = selected == tab,
+                    onClick = { onSelected(tab) },
                     icon = { Icon(tab.icon(), contentDescription = label) },
                     label = {
                         Text(

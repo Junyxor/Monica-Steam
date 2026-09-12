@@ -37,9 +37,6 @@ class SteamLoginImportServiceGuardTest {
         val source = projectFile(
             "app/src/main/java/takagi/ru/monica/steam/token/data/SteamLoginImportService.kt"
         ).readText()
-        val twoFactorProtocol = projectFile(
-            "app/src/main/java/takagi/ru/monica/steam/token/data/SteamTwoFactorProtocol.kt"
-        ).readText()
         val viewModelSource = projectFile(
             "app/src/main/java/takagi/ru/monica/steam/token/presentation/SteamViewModel.kt"
         ).readText()
@@ -49,13 +46,16 @@ class SteamLoginImportServiceGuardTest {
                 "\"platform_type\" to SteamMobileAuthRequestProfile.platformType.toString()"
             )
         )
-        assertTrue(source.contains("STEAM_WEBSITE_ID = SteamMobileAuthRequestProfile.websiteId"))
+        assertTrue(
+            source.contains(
+                "STEAM_WEBSITE_ID = SteamMobileAuthRequestProfile.websiteId"
+            )
+        )
         assertTrue(source.contains("pollPendingSession"))
         assertTrue(source.contains("codeAlreadyAccepted = updateEResult == 29"))
         assertTrue(source.contains("method = \"AddAuthenticator\""))
         assertTrue(source.contains("method = \"FinalizeAddAuthenticator\""))
-        assertTrue(source.contains("SteamTwoFactorProtocol.buildAddAuthenticatorRequest"))
-        assertTrue(twoFactorProtocol.contains("writeFixed64(1, steamIdLong)"))
+        assertTrue(source.contains("writeFixed64(1, steamIdLong)"))
         assertFalse(source.contains("URL_ADD_AUTHENTICATOR"))
         assertTrue(viewModelSource.contains("startPendingLoginPolling"))
         assertTrue(viewModelSource.contains("SteamLoginImportService.isPollingChallengeType"))
@@ -217,35 +217,32 @@ class SteamLoginImportServiceGuardTest {
         val source = projectFile(
             "app/src/main/java/takagi/ru/monica/steam/token/data/SteamLoginImportService.kt"
         ).readText()
-        val protocolSource = projectFile(
-            "app/src/main/java/takagi/ru/monica/steam/token/data/SteamLoginAuthProtocol.kt"
-        ).readText()
         val errorPolicySource = projectFile(
             "app/src/main/java/takagi/ru/monica/steam/token/loginerror/domain/SteamLoginErrorPolicy.kt"
         ).readText()
 
         assertTrue(source.contains("beginAuthSessionViaCredentialsWithProtobuf"))
         assertTrue(source.contains("method = \"BeginAuthSessionViaCredentials\""))
-        assertTrue(source.contains("SteamLoginAuthProtocol.buildBeginCredentialsRequest"))
-        assertTrue(source.contains("SteamLoginAuthProtocol.parseBeginCredentialsResponse"))
-        assertTrue(protocolSource.contains("writeString(1, SteamMobileAuthRequestProfile.deviceFriendlyName)"))
-        assertTrue(protocolSource.contains("writeString(2, userName)"))
-        assertTrue(protocolSource.contains("writeString(3, encryptedPassword)"))
-        assertTrue(protocolSource.contains("writeUint64(4, timestamp.toLong())"))
-        assertTrue(protocolSource.contains("writeBool(5, false)"))
-        assertTrue(protocolSource.contains("writeVarint(6, SteamMobileAuthRequestProfile.platformType)"))
-        assertTrue(protocolSource.contains("writeVarint(7, 1L)"))
-        assertTrue(protocolSource.contains("writeString(8, SteamMobileAuthRequestProfile.websiteId)"))
-        assertTrue(protocolSource.contains("writeMessage(9, buildDeviceDetails())"))
+        assertTrue(source.contains("writeString(1, DEVICE_FRIENDLY_NAME)"))
+        assertTrue(source.contains("writeString(2, userName)"))
+        assertTrue(source.contains("writeString(3, encryptedPassword)"))
+        assertTrue(source.contains("writeUint64(4, timestamp)"))
+        assertTrue(source.contains("writeBool(5, false)"))
+        assertTrue(
+            source.contains("writeVarint(6, SteamMobileAuthRequestProfile.platformType)")
+        )
+        assertTrue(source.contains("writeVarint(7, 1L)"))
+        assertTrue(source.contains("writeString(8, STEAM_WEBSITE_ID)"))
+        assertTrue(source.contains("writeMessage(9, buildAuthApiDeviceDetails())"))
+        assertTrue(source.contains("beginAuthSessionViaCredentialsWithProtobuf("))
         assertTrue(source.contains("val beginAuthResponse = postForm("))
 
         assertTrue(source.contains("submitSteamGuardCodeWithProtobuf"))
         assertTrue(source.contains("method = \"UpdateAuthSessionWithSteamGuardCode\""))
-        assertTrue(source.contains("SteamLoginAuthProtocol.buildUpdateGuardRequest"))
-        assertTrue(protocolSource.contains("writeUint64(1, clientIdBits.toLong())"))
-        assertTrue(protocolSource.contains("writeFixed64(2, steamIdBits.toLong())"))
-        assertTrue(protocolSource.contains("writeString(3, code.trim())"))
-        assertTrue(protocolSource.contains("writeVarint(4, confirmationType.toLong())"))
+        assertTrue(source.contains("writeUint64(1, clientIdLong)"))
+        assertTrue(source.contains("writeFixed64(2, steamIdLong)"))
+        assertTrue(source.contains("writeString(3, code.trim())"))
+        assertTrue(source.contains("writeVarint(4, confirmationType.toLong())"))
         assertTrue(source.contains("9 -> {"))
         assertTrue(source.contains("SteamGuardSubmitResult.UnsupportedSession"))
         assertTrue(errorPolicySource.contains("87 -> \"Steam 暂时限制了登录请求"))
@@ -260,15 +257,14 @@ class SteamLoginImportServiceGuardTest {
 
         assertTrue(source.contains("pollForTokenWithProtobuf"))
         assertTrue(source.contains("method = \"PollAuthSessionStatus\""))
-        assertTrue(source.contains("SteamLoginAuthProtocol.buildPollRequest"))
-        assertTrue(protocolSource.contains("writeBytes(2, requestIdBytes)"))
+        assertTrue(source.contains("writeUint64(1, clientId)"))
+        assertTrue(source.contains("writeBytes(2, authIds.requestId)"))
         assertTrue(source.contains("generateAccessTokenForApp("))
         assertTrue(source.contains("method = \"GenerateAccessTokenForApp\""))
-        assertTrue(source.contains("SteamLoginAuthProtocol.buildGenerateAccessTokenRequest"))
-        assertTrue(protocolSource.contains("writeString(1, refreshToken)"))
-        assertTrue(protocolSource.contains("writeFixed64(2, steamIdBits.toLong())"))
-        assertFalse(source.contains("decodeAuthApiRequestIdBytes"))
-        assertFalse(source.contains("parseUnsigned64AsSignedLong"))
+        assertTrue(source.contains("writeString(1, refreshToken)"))
+        assertTrue(source.contains("writeFixed64(2, steamIdLong)"))
+        assertTrue(source.contains("decodeAuthApiRequestIdBytes"))
+        assertTrue(source.contains("parseUnsigned64AsSignedLong"))
         assertTrue(source.contains("pollForTokenWithForm"))
     }
 
@@ -276,9 +272,6 @@ class SteamLoginImportServiceGuardTest {
     fun steamLoginImportSupportsMonicaGeneratedQrLogin() {
         val serviceSource = projectFile(
             "app/src/main/java/takagi/ru/monica/steam/token/data/SteamLoginImportService.kt"
-        ).readText()
-        val protocolSource = projectFile(
-            "app/src/main/java/takagi/ru/monica/steam/token/data/SteamLoginAuthProtocol.kt"
         ).readText()
         val viewModelSource = projectFile(
             "app/src/main/java/takagi/ru/monica/steam/token/presentation/SteamViewModel.kt"
@@ -291,12 +284,10 @@ class SteamLoginImportServiceGuardTest {
 
         assertTrue(serviceSource.contains("fun beginQrLogin(sessionOnly: Boolean = false): QrLoginResult"))
         assertTrue(serviceSource.contains("method = \"BeginAuthSessionViaQR\""))
-        assertTrue(serviceSource.contains("SteamLoginAuthProtocol.buildBeginQrRequest"))
-        assertTrue(serviceSource.contains("SteamLoginAuthProtocol.parseBeginQrResponse"))
-        assertTrue(protocolSource.contains("writeString(1, SteamMobileAuthRequestProfile.deviceFriendlyName)"))
-        assertTrue(protocolSource.contains("writeVarint(2, 3L)"))
-        assertTrue(protocolSource.contains("writeMessage(3, buildDeviceDetails())"))
-        assertTrue(protocolSource.contains("writeString(4, SteamMobileAuthRequestProfile.websiteId)"))
+        assertTrue(serviceSource.contains("writeString(1, DEVICE_FRIENDLY_NAME)"))
+        assertTrue(serviceSource.contains("writeVarint(2, 3L)"))
+        assertTrue(serviceSource.contains("writeMessage(3, buildAuthApiDeviceDetails())"))
+        assertTrue(serviceSource.contains("writeString(4, STEAM_WEBSITE_ID)"))
         assertTrue(serviceSource.contains("pollQrLoginSession"))
         assertTrue(serviceSource.contains("steamIdFromJwt(refreshToken)"))
         assertTrue(serviceSource.contains("steamIdFromJwt(accessToken)"))
@@ -324,20 +315,15 @@ class SteamLoginImportServiceGuardTest {
         val source = projectFile(
             "app/src/main/java/takagi/ru/monica/steam/token/data/SteamLoginImportService.kt"
         ).readText()
-        val protocolSource = projectFile(
-            "app/src/main/java/takagi/ru/monica/steam/token/data/SteamTwoFactorProtocol.kt"
-        ).readText()
 
         assertTrue(source.contains("method = \"RemoveAuthenticatorViaChallengeStart\""))
         assertTrue(source.contains("method = \"RemoveAuthenticatorViaChallengeContinue\""))
-        assertTrue(source.contains("SteamTwoFactorProtocol.buildReplaceContinueRequest"))
-        assertTrue(source.contains("SteamTwoFactorProtocol.parseReplaceContinueResponse"))
-        assertTrue(protocolSource.contains("writeString(1, code.trim())"))
-        assertTrue(protocolSource.contains("writeBool(2, true)"))
-        assertTrue(protocolSource.contains("writeVarint(3, 2L)"))
-        assertTrue(protocolSource.contains("val replacementFields = fields[2]?.bytes?.let"))
-        assertTrue(protocolSource.contains("replacementFields[1]?.bytes"))
-        assertTrue(protocolSource.contains("replacementFields[2]?.asFixed64UnsignedString"))
+        assertTrue(source.contains("writeString(1, code.trim())"))
+        assertTrue(source.contains("writeBool(2, true)"))
+        assertTrue(source.contains("writeVarint(3, 2L)"))
+        assertTrue(source.contains("val replacementFields = fields[2]?.bytes?.let"))
+        assertTrue(source.contains("replacementFields?.get(1)?.bytes"))
+        assertTrue(source.contains("replacementFields?.get(2)?.asFixed64UnsignedString"))
         assertFalse(source.contains("accessToken = session.replaceRefreshToken"))
         assertFalse(source.contains("accessToken = refreshToken"))
     }

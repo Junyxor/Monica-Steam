@@ -19,7 +19,8 @@ if command -v rustup >/dev/null 2>&1; then
   rustup target add aarch64-linux-android armv7-linux-androideabi
 fi
 
-rm -rf "$JNI_OUTPUT/arm64-v8a" "$JNI_OUTPUT/armeabi-v7a"
+# Only replace this crate's libraries. Other native dependencies may share these folders.
+rm -f "$JNI_OUTPUT/arm64-v8a/libmonica_steam_android.so" "$JNI_OUTPUT/armeabi-v7a/libmonica_steam_android.so"
 mkdir -p "$JNI_OUTPUT"
 
 (
@@ -30,6 +31,7 @@ mkdir -p "$JNI_OUTPUT"
     -t armeabi-v7a \
     -o "$JNI_OUTPUT" \
     build \
+    --locked \
     --release \
     -p monica-steam-android
 )

@@ -28,7 +28,7 @@ jobs:
           toolchain: 1.75.0
 
       - name: Test Rust Steam core
-        run: cargo test --manifest-path rust/monica-steam-core/Cargo.toml --all-targets
+        run: cargo test --manifest-path rust/monica-steam-core/Cargo.toml --all-targets --locked
 
   rust-workspace-tests:
     runs-on: ubuntu-latest
@@ -43,7 +43,7 @@ jobs:
           toolchain: 1.77.0
 
       - name: Test Rust workspace
-        run: cargo test --manifest-path rust/Cargo.toml --workspace --all-targets
+        run: cargo test --manifest-path rust/Cargo.toml --workspace --all-targets --locked
 
   rust-android-smoke:
     runs-on: ubuntu-latest
@@ -101,7 +101,7 @@ jobs:
         shell: bash
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug assembleRelease --stacktrace
 
       - name: Verify Rust libraries inside APKs
         shell: bash
@@ -139,6 +139,10 @@ jobs:
   network-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        native: [false, true]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -155,9 +159,23 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
+      - name: Set up host Rust toolchain
+        if: matrix.native
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build host JNI library
+        if: matrix.native
+        run: cargo build --manifest-path rust/Cargo.toml --locked -p monica-steam-android
+
       - name: Run Steam protocol and network tests
         run: >-
           ./gradlew testDebugUnitTest --stacktrace
+          ${{ matrix.native && '-PsteamNativeTestLibraryDir=../rust/target/debug' || '' }}
+          --tests 'takagi.ru.monica.steam.core.SteamNativeIntegrationTest'
+          --tests 'takagi.ru.monica.steam.SteamMaFileParserTest'
+          --tests 'takagi.ru.monica.steam.SteamCoreAlgorithmsTest'
+          --tests 'takagi.ru.monica.steam.SteamLoginImportServiceGuardTest'
+          --tests 'takagi.ru.monica.steam.navigation.SteamLiquidGlassDockGuardTest'
           --tests 'takagi.ru.monica.steam.network.SteamProtoTest'
           --tests 'takagi.ru.monica.steam.network.RustAuthSessionParserTest'
           --tests 'takagi.ru.monica.steam.network.RustAuthorizedDeviceParserTest'

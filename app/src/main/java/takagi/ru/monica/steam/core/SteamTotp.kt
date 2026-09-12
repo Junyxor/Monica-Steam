@@ -10,34 +10,6 @@ object SteamTotp {
     private const val CODE_CHARS = "23456789BCDFGHJKMNPQRTVWXY"
 
     fun generateAuthCode(sharedSecretBase64: String, unixTimeSeconds: Long): String {
-        RustSteamCoreNative.generateAuthCodeOrNull(
-            sharedSecretBase64 = sharedSecretBase64,
-            unixTimeSeconds = unixTimeSeconds
-        )?.let { return it }
-        return generateAuthCodeKotlin(sharedSecretBase64, unixTimeSeconds)
-    }
-
-    fun generateConfirmationHash(
-        identitySecretBase64: String,
-        unixTimeSeconds: Long,
-        tag: String
-    ): String {
-        RustSteamCoreNative.generateConfirmationHashOrNull(
-            identitySecretBase64 = identitySecretBase64,
-            unixTimeSeconds = unixTimeSeconds,
-            tag = tag
-        )?.let { return it }
-        return generateConfirmationHashKotlin(identitySecretBase64, unixTimeSeconds, tag)
-    }
-
-    // This runs once per UI tick. A local modulo is cheaper than crossing JNI every second.
-    fun secondsRemaining(unixTimeSeconds: Long): Int =
-        (30L - Math.floorMod(unixTimeSeconds, 30L)).toInt()
-
-    private fun generateAuthCodeKotlin(
-        sharedSecretBase64: String,
-        unixTimeSeconds: Long
-    ): String {
         val key = decodeSecretOrNull(sharedSecretBase64) ?: return ""
         val counter = unixTimeSeconds / 30L
         val timeBytes = ByteBuffer.allocate(8)
@@ -59,7 +31,7 @@ object SteamTotp {
         }
     }
 
-    private fun generateConfirmationHashKotlin(
+    fun generateConfirmationHash(
         identitySecretBase64: String,
         unixTimeSeconds: Long,
         tag: String
@@ -73,6 +45,8 @@ object SteamTotp {
         val payload = timeBytes + tagBytes
         return Base64.getEncoder().encodeToString(hmac("HmacSHA1", key, payload))
     }
+
+    fun secondsRemaining(unixTimeSeconds: Long): Int = (30L - (unixTimeSeconds % 30L)).toInt()
 
     private fun decodeSecretOrNull(encodedSecret: String): ByteArray? {
         val normalized = encodedSecret.trim()

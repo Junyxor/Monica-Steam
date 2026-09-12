@@ -16,7 +16,6 @@ The CI deliberately tests the core at Rust 1.75 and the complete workspace at Ru
 
 The Rust core now owns the coarse-grained protocol or parsing work for:
 
-- Steam Guard auth codes, confirmation hashes and login/token signatures;
 - bounded protobuf reading/writing with borrowed field views;
 - Steam CM envelope encoding/decoding, multi-message payloads and web-logon bodies;
 - direct-message sessions and history pages, including reactions;
@@ -24,12 +23,11 @@ The Rust core now owns the coarse-grained protocol or parsing work for:
 - owned games, achievement progress, StoreBrowse metadata and achievement detail merging;
 - family shared-library apps;
 - friend nickname lists;
-- pending login client IDs, auth-session info and mobile-confirmation responses;
 - authorized-device enumeration;
 - trade-offer pages, including descriptions, nested assets and sorting;
 - wishlist pages, including nested store assets and purchase options.
 
-Production Android call sites use these paths Rust-first and retain their Kotlin implementations as compatibility fallbacks.
+Production Android call sites use the batch read parsers and CM codec Rust-first and retain their Kotlin implementations as compatibility fallbacks. Secret import, Steam Guard codes, confirmation hashes, login approval signing, login orchestration and authenticator changes use the established Kotlin implementations. The Android bridge does not expose secret import, Guard/signing or authenticator mutation entry points. Their Rust core implementations remain covered by host tests for reference, but are not used by Android.
 
 ## Android bridge layout
 
@@ -39,7 +37,6 @@ Production Android call sites use these paths Rust-first and retain their Kotlin
 auth_bridge.rs         auth sessions and authorized devices
 chat_bridge.rs         direct-message sessions and history
 cm_bridge.rs           CM envelopes and web logon
-guard_bridge.rs        Steam Guard/HMAC operations
 family_bridge.rs       family shared library
 friend_bridge.rs       friend nickname lists
 group_chat_bridge.rs   group chat/history summaries
@@ -94,6 +91,22 @@ Then build Android normally:
 ```
 
 `Steam Network CI` also verifies that both `.so` files are actually present inside the generated split APKs. Successful CI runs upload the debug APKs together with `apk-sha256.txt` and `apk-contents.txt` for device testing.
+
+On Windows with an installed NDK and cargo-ndk, run from `rust/`:
+
+```powershell
+$env:ANDROID_NDK_HOME = 'D:/AndroidSDK/ndk/28.2.13676358' # Use your installed NDK path.
+cargo ndk --platform 26 -t arm64-v8a -t armeabi-v7a -o ../app/src/main/jniLibs build --release --locked -p monica-steam-android
+```
+
+Normal Gradle builds do not invoke Cargo. Run the native build first when packaging Rust support; otherwise the app uses Kotlin fallbacks. CI builds and tests a real host JNI library in a separate test job, in addition to the fallback job:
+
+```sh
+cargo build --manifest-path rust/Cargo.toml --locked -p monica-steam-android
+./gradlew testDebugUnitTest -PsteamNativeTestLibraryDir=../rust/target/debug --tests 'takagi.ru.monica.steam.*'
+```
+
+The Gradle property is relative to the `app/` directory and makes the integration tests fail if the native library cannot load. Test without the property to exercise the Kotlin fallbacks. Cargo.lock is committed to keep both CI and native builds reproducible.
 
 ## Native bridge policy
 

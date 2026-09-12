@@ -1,5 +1,6 @@
 use base64::{
-    engine::general_purpose::{STANDARD, URL_SAFE},
+    engine::general_purpose::STANDARD,
+    engine::{GeneralPurpose, GeneralPurposeConfig},
     Engine as _,
 };
 use serde_json::{Map, Value};
@@ -358,10 +359,20 @@ fn decode_base64(value: &str) -> Option<Vec<u8>> {
     if remainder != 0 {
         padded.push_str(&"=".repeat(4 - remainder));
     }
-    STANDARD
+    // java.util.Base64 (used by the Kotlin fallback) accepts non-zero unused
+    // bits in the final quantum. Keep that compatibility for legacy maFiles.
+    let compatible_standard = GeneralPurpose::new(
+        &base64::alphabet::STANDARD,
+        GeneralPurposeConfig::new().with_decode_allow_trailing_bits(true),
+    );
+    let compatible_url_safe = GeneralPurpose::new(
+        &base64::alphabet::URL_SAFE,
+        GeneralPurposeConfig::new().with_decode_allow_trailing_bits(true),
+    );
+    compatible_standard
         .decode(padded.as_bytes())
         .ok()
-        .or_else(|| URL_SAFE.decode(padded.as_bytes()).ok())
+        .or_else(|| compatible_url_safe.decode(padded.as_bytes()).ok())
 }
 
 fn decode_base32(value: &str) -> Option<Vec<u8>> {
@@ -679,6 +690,16 @@ mod tests {
         let input = format!(r#"{{"shared_secret":"{SECRET_B64}"}}"#);
         let payload = parse_ma_file_json(&input, None, None, Some("39734272"), false).unwrap();
         assert_eq!(payload.steam_id, "76561198000000000");
+    }
+
+    #[test]
+    fn standard_base64_accepts_java_trailing_bits_before_base32_fallback() {
+        let input = format!(
+            r#"{{"steamid":"76561198000000000","shared_secret":"{}B="}}"#,
+            "C".repeat(26)
+        );
+        let payload = parse_ma_file_json(&input, None, None, None, false).unwrap();
+        assert_eq!(payload.shared_secret, format!("{}A=", "C".repeat(26)));
     }
 
     #[test]
