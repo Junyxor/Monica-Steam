@@ -48,6 +48,10 @@ jobs:
   rust-android-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [Debug, Release]
     env:
       ANDROID_NDK_VERSION: 27.2.12479018
     steps:
@@ -101,7 +105,12 @@ jobs:
         shell: bash
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug assembleRelease --stacktrace
+          free -h
+          # A separate Kotlin daemon plus both R8 variants can exceed runner RAM.
+          # Build one variant per runner in one bounded JVM.
+          ./gradlew :app:assemble${{ matrix.variant }} --stacktrace --no-daemon --max-workers=1 \
+            -Pkotlin.compiler.execution.strategy=in-process \
+            '-Dorg.gradle.jvmargs=-Xmx10g -Dfile.encoding=UTF-8'
 
       - name: Verify Rust libraries inside APKs
         shell: bash
@@ -124,10 +133,10 @@ jobs:
           sha256sum "${apks[@]}" > apk-sha256.txt
           cat apk-sha256.txt
 
-      - name: Upload debug APKs
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
-          name: monica-steam-rust-debug-${{ github.run_number }}
+          name: monica-steam-rust-${{ matrix.variant }}-${{ github.run_number }}
           path: |
             app/build/outputs/apk/**/*.APK
             app/build/outputs/apk/**/*.apk
